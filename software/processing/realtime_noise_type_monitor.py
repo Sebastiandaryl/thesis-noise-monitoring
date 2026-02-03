@@ -33,9 +33,14 @@ def a_weighting(fs):
 # =====================================
 SAMPLE_RATE = 48000
 DURATION = 1                 # seconds per chunk
-RMS_REF = 0.0004             # empirically measured quiet-room RMS
-SOFTWARE_GAIN = 5.0          # compensates for low-sensitivity MEMS mic
-TEMP_WAV = "temp_chunk.wav"
+RMS_REF = 0.0004            # empirically measured quiet-room RMS
+SOFTWARE_GAIN = 5.0        # compensates for low-sensitivity MEMS mic
+
+# path so SSH / services work
+TEMP_WAV = "/tmp/temp_chunk.wav"
+
+# ALSA device
+ARECORD_DEVICE = "plughw:CARD=sndrpigooglevoi,DEV=0"
 
 print("\n🔴 REAL-TIME NOISE MONITORING (Ctrl+C to stop)\n")
 
@@ -44,15 +49,25 @@ try:
         # ---------------------------------
         # RECORD AUDIO CHUNK
         # ---------------------------------
-        subprocess.run([
+        rec = subprocess.run([
             "arecord",
-            "-D", "hw:3,0",
+            "-D", ARECORD_DEVICE,
             "-f", "S32_LE",
             "-r", str(SAMPLE_RATE),
-            "-c", "2",
+            "-c", "1", # mono
             "-d", str(DURATION),
             TEMP_WAV
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ], capture_output=True, text=True)
+
+        # ---------------------------------
+        # FIX: Don’t crash if file missing
+        # ---------------------------------
+        if rec.returncode != 0 or not os.path.exists(TEMP_WAV):
+            print("Warning: audio chunk not recorded. Retrying...")
+            if rec.stderr:
+                print("arecord error:", rec.stderr.strip())
+            time.sleep(0.2)
+            continue
 
         # ---------------------------------
         # LOAD AUDIO
@@ -60,11 +75,11 @@ try:
         fs, data = wav.read(TEMP_WAV)
         data = data.astype(np.float64)
 
-        # Use mono channel
+        # mono channel
         if data.ndim > 1:
             data = data[:, 0]
 
-        # Normalize 32-bit PCM
+        # normalize 32-bit PCM
         data = data / (2**31)
 
         # ---------------------------------
@@ -73,14 +88,18 @@ try:
         b, a = a_weighting(fs)
         weighted = lfilter(b, a, data)
 
-        # Apply software gain
+        # apply software gain
         weighted = weighted * SOFTWARE_GAIN
 
         # ---------------------------------
         # RMS & RELATIVE dB
         # ---------------------------------
         rms = np.sqrt(np.mean(weighted ** 2))
-        db = 20 * math.log10(rms / RMS_REF)
+        if rms <= 0:
+            db = 0.0
+        else:
+            db = 20 * math.log10(rms / RMS_REF)
+
         db = max(db, 0)  # clamp negative values
 
         # ---------------------------------
@@ -90,8 +109,7 @@ try:
         fft = np.abs(np.fft.rfft(data))
         freqs = np.fft.rfftfreq(len(data), 1 / fs)
 
-
-        # Frequency bands
+        # frequency bands
         low_band = (freqs >= 20) & (freqs <= 300)
         mid_band = (freqs >= 300) & (freqs <= 3400)
 
