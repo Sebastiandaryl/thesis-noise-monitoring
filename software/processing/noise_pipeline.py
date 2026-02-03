@@ -36,8 +36,11 @@ wav_path = os.path.join(
     "..",
     "data",
     "raw_samples",
-    "test_raw.wav"
+    "loud_noise.wav"
 )
+
+if not os.path.exists(wav_path):
+    raise FileNotFoundError(f"Audio file not found: {wav_path}")
 
 fs, data = wav.read(wav_path)
 
@@ -46,12 +49,15 @@ fs, data = wav.read(wav_path)
 # =====================================
 data = data.astype(np.float64)
 
-# Use one channel if stereo
+# Use mono if stereo
 if data.ndim > 1:
     data = data[:, 0]
 
-# Normalize 32-bit PCM
-data = data / (2**31)
+# Normalize by dtype
+if data.dtype == np.int16:
+    data = data / 32768.0
+elif data.dtype == np.int32:
+    data = data / (2**31)
 
 # =====================================
 # APPLY A-WEIGHTING
@@ -60,32 +66,26 @@ b, a = a_weighting(fs)
 weighted = lfilter(b, a, data)
 
 # =====================================
-# RMS CALCULATION
+# RMS & RELATIVE dB
 # =====================================
 rms = np.sqrt(np.mean(weighted ** 2))
 
-# =====================================
-# BASIC CALIBRATION (REFERENCE RMS)
-# =====================================
-rms_ref = 0.005  # quiet room reference (adjust later)
+RMS_REF = 0.005  # quiet-room reference (relative, not absolute SPL)
+db = 20 * math.log10(rms / RMS_REF)
+db = max(db, 0)  # clamp for display
 
 # =====================================
-# DECIBEL CALCULATION
-# =====================================
-db = 20 * math.log10(rms / rms_ref)
-
-# =====================================
-# NOISE LEVEL CLASSIFICATION
+# CLASSIFICATION (RELATIVE)
 # =====================================
 if db < 20:
-    level = "LOW noise (quiet environment)"
+    level = "LOW noise (quiet)"
 elif db < 50:
-    level = "MODERATE noise (normal human activity)"
+    level = "MODERATE noise"
 else:
-    level = "HIGH noise (loud environment)"
+    level = "HIGH noise"
 
 # =====================================
-# OUTPUT RESULTS
+# OUTPUT
 # =====================================
 print("----- Noise Analysis Result -----")
 print(f"Sample rate        : {fs} Hz")
