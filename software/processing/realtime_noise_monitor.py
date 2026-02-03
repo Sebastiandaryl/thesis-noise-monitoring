@@ -34,7 +34,10 @@ def a_weighting(fs):
 SAMPLE_RATE = 48000
 DURATION = 1           # seconds per chunk
 RMS_REF = 0.005        # quiet room reference
-TEMP_WAV = "temp_chunk.wav"
+TEMP_WAV = "/tmp/temp_chunk.wav"
+
+# actual ALSA capture device from `arecord -L`
+ARECORD_DEVICE = "plughw:CARD=sndrpigooglevoi,DEV=0"
 
 print("🔴 Real-time Noise Monitoring Started (Ctrl+C to stop)\n")
 
@@ -43,15 +46,25 @@ try:
         # -------------------------------
         # RECORD 1-SECOND AUDIO CHUNK
         # -------------------------------
-        subprocess.run([
+        rec = subprocess.run([
             "arecord",
-            "-D", "hw:3,0",
+            "-D", ARECORD_DEVICE,
             "-f", "S32_LE",
             "-r", str(SAMPLE_RATE),
-            "-c", "2",
+            "-c", "1", # mono
             "-d", str(DURATION),
             TEMP_WAV
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ], capture_output=True, text=True)
+
+        # -------------------------------
+        # if arecord fails or file isnt created, dont crash
+        # -------------------------------
+        if rec.returncode != 0 or not os.path.exists(TEMP_WAV):
+            print("Warning: arecord did not create the temp wav. Retrying...")
+            if rec.stderr:
+                print("arecord error:", rec.stderr.strip())
+            time.sleep(0.2)
+            continue
 
         # -------------------------------
         # LOAD AUDIO
@@ -74,7 +87,7 @@ try:
         # RMS & dB
         # -------------------------------
         rms = np.sqrt(np.mean(weighted ** 2))
-        db = 20 * math.log10(rms / RMS_REF)
+        db = -120.0 if rms <= 0 else 20 * math.log10(rms / RMS_REF)
 
         # -------------------------------
         # CLASSIFICATION
