@@ -1,136 +1,136 @@
-import numpy as np
-import scipy.io.wavfile as wav
-from scipy.signal import bilinear, lfilter
-import math
-import os
-import time
-import subprocess
+from pathlib import Path
 import librosa
+import numpy as np
+import pandas as pd
 import joblib
+import sounddevice as sd
+import warnings
 
-# =====================================
-# TRAINED RF MODEL ONCE
-# =====================================
-MODEL_PATH = "/home/aidrivennoise/thesis/data/features/rf_model.joblib"
-clf = joblib.load(MODEL_PATH)
+warnings.filterwarnings("ignore")
 
-# =====================================
-# A-WEIGHTING FILTER (UNCHANGED)
-# =====================================
-def a_weighting(fs):
-    f1 = 20.598997
-    f2 = 107.65265
-    f3 = 737.86223
-    f4 = 12194.217
-    A1000 = 1.9997
+# =========================
+# PATH SETUP
+# =========================
 
-    nums = [(2 * math.pi * f4) ** 2 * (10 ** (A1000 / 20)), 0, 0, 0, 0]
-    dens = np.convolve(
-        [1, 4 * math.pi * f4, (2 * math.pi * f4) ** 2],
-        [1, 4 * math.pi * f1, (2 * math.pi * f1) ** 2]
+BASE_DIR = Path(__file__).resolve().parents[2]
+
+MODEL_PATH = BASE_DIR / "data" / "features" / "rf_model.joblib"
+FEATURE_CSV = BASE_DIR / "data" / "features" / "features.csv"
+
+TARGET_SR = 44100
+RECORD_SECONDS = 3
+N_MFCC = 13
+
+# =========================
+# LOAD MODEL + FEATURE NAMES
+# =========================
+
+print("Loading model...")
+
+model = joblib.load(MODEL_PATH)
+
+feature_df = pd.read_csv(FEATURE_CSV)
+feature_columns = feature_df.drop(columns=["label", "filename", "filepath"]).columns
+
+print("Model loaded.")
+
+# =========================
+# AUDIO RECORD FUNCTION
+# =========================
+
+def record_audio():
+
+    print(f"\nRecording {RECORD_SECONDS} seconds...")
+
+    audio = sd.rec(
+        int(RECORD_SECONDS * TARGET_SR),
+        samplerate=TARGET_SR,
+        channels=1,
+        dtype="float32"
     )
-    dens = np.convolve(
-        np.convolve(dens, [1, 2 * math.pi * f3]),
-        [1, 2 * math.pi * f2]
-    )
 
-    return bilinear(nums, dens, fs)
+    sd.wait()
 
-# =====================================
-# ML FEATURE EXTRACTION
-# =====================================
-def extract_ml_features(filepath):
-    y, sr = librosa.load(filepath, sr=48000, mono=True)
+    print("Recording complete.")
 
+    return audio.flatten()
+
+# =========================
+# FEATURE EXTRACTION
+# =========================
+
+def extract_features(y):
+
+    peak = np.max(np.abs(y))
+    if peak > 0:
+        y = y / peak
+
+    features = []
+
+    # RMS
     rms = librosa.feature.rms(y=y)[0]
-    rms_mean = np.mean(rms)
-    rms_std = np.std(rms)
+    features += [np.mean(rms), np.std(rms)]
 
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-    mfcc_mean = np.mean(mfcc, axis=1)
-    mfcc_std = np.std(mfcc, axis=1)
+    # ZCR
+    zcr = librosa.feature.zero_crossing_rate(y)[0]
+    features += [np.mean(zcr), np.std(zcr)]
 
-    centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
-    bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr)[0]
-    rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
-    flatness = librosa.feature.spectral_flatness(y=y)[0]
+    # Spectral centroid
+    centroid = librosa.feature.spectral_centroid(y=y, sr=TARGET_SR)[0]
+    features += [np.mean(centroid), np.std(centroid)]
 
-    features = [rms_mean, rms_std]
-    features += mfcc_mean.tolist() + mfcc_std.tolist()
-    features += [
-        np.mean(centroid), np.std(centroid),
-        np.mean(bandwidth), np.std(bandwidth),
-        np.mean(rolloff), np.std(rolloff),
-        np.mean(flatness), np.std(flatness)
-    ]
+    # Bandwidth
+    bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=TARGET_SR)[0]
+    features += [np.mean(bandwidth), np.std(bandwidth)]
 
-    return np.array(features).reshape(1, -1)
+    # Rolloff
+    rolloff = librosa.feature.spectral_rolloff(y=y, sr=TARGET_SR)[0]
+    features += [np.mean(rolloff), np.std(rolloff)]
 
-# =====================================
-# SYSTEM SETTINGS (UNCHANGED)
-# =====================================
-SAMPLE_RATE = 48000
-DURATION = 1
-RMS_REF = 0.0004
-SOFTWARE_GAIN = 5.0
+    # Spectral contrast
+    contrast = librosa.feature.spectral_contrast(y=y, sr=TARGET_SR)
+    for i in range(contrast.shape[0]):
+        features += [np.mean(contrast[i]), np.std(contrast[i])]
 
-TEMP_WAV = "/tmp/temp_chunk.wav"
-ARECORD_DEVICE = "plughw:CARD=sndrpigooglevoi,DEV=0"
+    # Chroma
+    chroma = librosa.feature.chroma_stft(y=y, sr=TARGET_SR)
+    for i in range(chroma.shape[0]):
+        features += [np.mean(chroma[i]), np.std(chroma[i])]
 
-print("\n🔴 LIVE ML-BASED NOISE CLASSIFICATION (Ctrl+C to stop)\n")
+    # MFCC
+    mfcc = librosa.feature.mfcc(y=y, sr=TARGET_SR, n_mfcc=N_MFCC)
+    for i in range(N_MFCC):
+        features += [np.mean(mfcc[i]), np.std(mfcc[i])]
 
-try:
-    while True:
-        # ---------------------------------
-        # RECORD AUDIO (UNCHANGED)
-        # ---------------------------------
-        rec = subprocess.run([
-            "arecord",
-            "-D", ARECORD_DEVICE,
-            "-f", "S32_LE",
-            "-r", str(SAMPLE_RATE),
-            "-c", "1",
-            "-d", str(DURATION),
-            TEMP_WAV
-        ], capture_output=True)
+    return features
 
-        if rec.returncode != 0 or not os.path.exists(TEMP_WAV):
-            print("⚠️ Audio capture failed")
-            time.sleep(0.2)
-            continue
+# =========================
+# MAIN LOOP
+# =========================
 
-        # ---------------------------------
-        # LOAD + NORMALIZE
-        # ---------------------------------
-        fs, data = wav.read(TEMP_WAV)
-        data = data.astype(np.float64) / (2**31)
+while True:
 
-        if data.ndim > 1:
-            data = data[:, 0]
+    input("\nPress ENTER to record...")
 
-        # ---------------------------------
-        # RMS + RELATIVE dB
-        # ---------------------------------
-        b, a = a_weighting(fs)
-        weighted = lfilter(b, a, data) * SOFTWARE_GAIN
-        rms = np.sqrt(np.mean(weighted ** 2))
-        db = 20 * math.log10(rms / RMS_REF) if rms > 0 else 0
-        db = max(db, 0)
+    audio = record_audio()
 
-        # ---------------------------------
-        # RF PREDICTION (LIVE)
-        # ---------------------------------
-        X = extract_ml_features(TEMP_WAV)
-        noise_type = clf.predict(X)[0]
+    features = extract_features(audio)
 
-        # ---------------------------------
-        # OUTPUT (LIVE)
-        # ---------------------------------
-        print(f"SPL: {db:6.2f} dB | TYPE: {noise_type.upper()}")
+    X = pd.DataFrame([features], columns=feature_columns)
 
-        time.sleep(0.2)
+    prediction = model.predict(X)[0]
+    probabilities = model.predict_proba(X)[0]
 
-except KeyboardInterrupt:
-    print("\n🟢 Monitoring stopped.")
-    if os.path.exists(TEMP_WAV):
-        os.remove(TEMP_WAV)
+    print("\nPredicted class:", prediction)
+    print("Confidence:", np.max(probabilities))
+
+    # ++++ optional ++++
+ 
+    class_names = model.classes_
+
+    top3_idx = np.argsort(probabilities)[-3:][::-1]
+
+    print("\nTop 3 probabilities:")
+    for i in top3_idx:
+        print(f"{class_names[i]} : {probabilities[i]:.3f}")
+    # ++++ optional ++++
