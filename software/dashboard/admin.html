@@ -1,0 +1,1029 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Noise Atlas Staff Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87,600;87,700;100,600&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/leaflet.css">
+<link rel="stylesheet" href="assets/core.css">
+</head>
+<body class="locked">
+<div class="login" id="login" hidden>
+  <form class="login-card" id="loginForm" autocomplete="on">
+    <svg class="brand-mark" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="var(--accent)"/><g fill="none" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round"><path d="M9 17h2l2-6 3 12 3-15 3 12 2-3h2"/></g></svg>
+    <h1>Staff sign in</h1>
+    <p class="note">For administrators and government planners. Residents can use the <a href="index.html">public noise map</a> without an account.</p>
+    <div class="field"><label for="loginUser">Username</label><input type="text" id="loginUser" autocomplete="username" required></div>
+    <div class="field"><label for="loginPass">Password</label><input type="password" id="loginPass" autocomplete="current-password" required></div>
+    <div class="msg err" id="loginError" hidden></div>
+    <button class="btn primary" id="loginBtn" type="submit" style="height:36px;justify-content:center">Sign in</button>
+    <p class="msg" id="demoHint" hidden>Preview mode (no server): sign in as <b class="mono">admin</b> / <b class="mono">admin123</b> or <b class="mono">planner</b> / <b class="mono">planner123</b>. Changes are saved only in this browser.</p>
+  </form>
+</div>
+
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 34 34" aria-hidden="true">
+        <rect width="34" height="34" rx="8" fill="var(--accent)"/>
+        <g fill="none" stroke="var(--accent-ink)" stroke-width="2" stroke-linecap="round">
+          <path d="M9 17h2l2-6 3 12 3-15 3 12 2-3h2"/>
+        </g>
+      </svg>
+      <div>
+        <h1 id="appTitle">Manila Noise Atlas</h1>
+        <p>Staff dashboard · AI-driven noise monitoring &amp; chaos-based acoustic analysis</p>
+      </div>
+    </div>
+    <div class="bar-meta">
+      <span class="pill" id="sourcePill" title="Where the readings come from"><span class="dot sim" id="sourceDot"></span><span id="sourceText">Simulated data</span></span>
+      <span class="pill" id="limitPill" title="WHO guideline in force right now"><span id="limitText">Daytime · WHO 55 dB</span></span>
+      <span class="pill mono" id="clock">--:--:--</span>
+      <button class="btn" id="copyCsv" type="button" title="Copy current readings as CSV">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8" height="9" rx="1.5"/><path d="M3 11V3.5C3 2.7 3.7 2 4.5 2H10"/></svg>Copy CSV
+      </button>
+      <button class="btn" id="openSettings" type="button" data-admin-only>
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8h3m6 0h3M5 8a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Zm3-4h6M2 4h3m3 8h6M2 12h3"/></svg>Data source
+      </button>
+      <a class="btn" href="index.html">Public view</a>
+      <span class="userchip"><span class="avatar" aria-hidden="true"></span><span><b id="userName">—</b><small id="userRole"></small></span></span>
+      <button class="btn primary" id="logoutBtn" type="button">Log out</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell" style="margin-top:14px">
+
+  <section class="kpis" aria-label="Network summary">
+    <div class="kpi"><span class="eyebrow">Network LAeq</span><span class="kpi-value" id="kNet">--<small>dB</small></span><span class="kpi-sub" id="kNetSub">&nbsp;</span></div>
+    <div class="kpi"><span class="eyebrow">Loudest site</span><span class="kpi-value" id="kLoud">--<small>dB</small></span><span class="kpi-sub" id="kLoudSub">&nbsp;</span></div>
+    <div class="kpi"><span class="eyebrow">Above WHO limit</span><span class="kpi-value" id="kOver">--</span><span class="kpi-sub" id="kOverSub">&nbsp;</span></div>
+    <div class="kpi"><span class="eyebrow">Active alerts</span><span class="kpi-value" id="kAlerts">--</span><span class="kpi-sub" id="kAlertsSub">&nbsp;</span></div>
+    <div class="kpi"><span class="eyebrow">Forecast error, 1 h</span><span class="kpi-value" id="kMae">--<small>dB MAE</small></span><span class="kpi-sub" id="kMaeSub">&nbsp;</span></div>
+    <div class="kpi"><span class="eyebrow">Sensor nodes</span><span class="kpi-value" id="kNodes">--</span><span class="kpi-sub" id="kNodesSub">&nbsp;</span></div>
+  </section>
+
+  <section class="workspace">
+    <aside class="card rail" aria-label="Map layers and filters">
+      <section>
+        <h2>Map layers</h2>
+        <div class="field">
+          <label for="basemap">Basemap</label>
+          <select id="basemap">
+            <option value="auto">Auto (matches theme)</option>
+            <option value="osm">Streets · OpenStreetMap</option>
+            <option value="light">Light · CARTO</option>
+            <option value="dark">Dark · CARTO</option>
+            <option value="sat">Satellite · Esri</option>
+            <option value="schematic">Schematic (offline)</option>
+          </select>
+        </div>
+        <span class="lbl">Show values</span>
+        <div class="seg" role="group" aria-label="Show values">
+          <button type="button" id="viewMeasured" aria-pressed="true">Measured</button>
+          <button type="button" id="viewPredicted" aria-pressed="false">Predicted</button>
+        </div>
+        <label class="toggle"><span>Sensor markers</span><input type="checkbox" id="layerMarkers" checked><span class="switch"></span></label>
+        <label class="toggle"><span>Noise heatmap</span><input type="checkbox" id="layerHeat" checked><span class="switch"></span></label>
+        <label class="toggle"><span>High-risk zones</span><input type="checkbox" id="layerZones" checked><span class="switch"></span></label>
+      </section>
+      <section>
+        <h2>Filters</h2>
+        <span class="lbl">Dominant noise source</span>
+        <div class="chips" id="catChips"></div>
+        <div class="field">
+          <label for="minDb">Minimum level: <b class="mono" id="minDbVal">40 dB</b></label>
+          <input type="range" id="minDb" min="40" max="90" step="1" value="40">
+        </div>
+        <label class="toggle"><span>Only sites above WHO limit</span><input type="checkbox" id="onlyOver"><span class="switch"></span></label>
+        <p class="note" id="filterNote"></p>
+      </section>
+      <section>
+        <h2>Noise level scale</h2>
+        <div class="legend-scale" id="legend"></div>
+        <p class="note">A-weighted equivalent level (LAeq). WHO guideline: 55 dB day, 40 dB night.</p>
+      </section>
+    </aside>
+
+    <div class="card map-card">
+      <div class="map-wrap">
+        <div id="map" role="region" aria-label="Noise map"></div>
+        <div class="map-banner">
+          <span class="pill" id="mapMode">Measured · live</span>
+        </div>
+        <div class="map-notice" id="mapNotice" hidden></div>
+      </div>
+      <div class="replay">
+        <button class="btn" id="playBtn" type="button" aria-label="Play 24-hour replay">
+          <svg viewBox="0 0 16 16" fill="currentColor" id="playIcon"><path d="M4 2.5v11l9-5.5z"/></svg><span id="playLabel">Replay 24 h</span>
+        </button>
+        <input type="range" id="scrub" min="-1439" max="0" step="1" value="0" aria-label="Time on map">
+        <span class="replay-time mono" id="scrubTime">Live</span>
+        <button class="btn ghost" id="liveBtn" type="button">Go live</button>
+      </div>
+    </div>
+
+    <div class="card panel-card">
+      <div class="panel" id="panel">
+        <div class="panel-sec">
+          <div class="field">
+            <label for="siteSelect">Sensor site</label>
+            <select id="siteSelect"></select>
+          </div>
+          <div class="site-title">
+            <h2 id="pName">—</h2>
+            <div class="site-meta"><span id="pType"></span><span class="mono" id="pCoord"></span></div>
+            <div class="row" id="pStatus"></div>
+          </div>
+          <div class="readout">
+            <div>
+              <div class="eyebrow">Measured</div>
+              <div class="big" id="pNow">--<small>dB</small></div>
+              <div class="row" style="margin-top:6px" id="pBand"></div>
+            </div>
+            <div>
+              <div class="eyebrow">Predicted +15 min</div>
+              <div class="mid" id="pPred">--<small>dB</small></div>
+              <div class="sub" id="pDelta" style="margin-top:6px"></div>
+            </div>
+          </div>
+          <div class="stats4">
+            <div class="stat"><b id="pLeq">--</b><span>LAeq, 1 h</span></div>
+            <div class="stat"><b id="pMax">--</b><span>Lmax, 1 h</span></div>
+            <div class="stat"><b id="pL10">--</b><span>L10 (peaks)</span></div>
+            <div class="stat"><b id="pL90">--</b><span>L90 (background)</span></div>
+          </div>
+        </div>
+        <div class="panel-sec">
+          <div class="row" style="justify-content:space-between">
+            <h2>Noise source classification</h2>
+          </div>
+          <div class="sub" id="pClass">—</div>
+          <div class="probs" id="pProbs"></div>
+        </div>
+        <div class="panel-sec">
+          <div class="row" style="justify-content:space-between">
+            <h2>Chaos analysis</h2>
+            <span class="status" id="pChaosState">—</span>
+          </div>
+          <div class="chaos">
+            <div class="stat"><b id="pLle">--</b><span>Lyapunov λ</span></div>
+            <div class="stat"><b id="pD2">--</b><span>Corr. dim D₂</span></div>
+            <div class="stat"><b id="pDf">--</b><span>Fractal dim Df</span></div>
+          </div>
+          <p class="note">λ &gt; 0 means nearby noise states diverge (chaotic). Higher D₂ and Df mean a more complex, less predictable soundscape.</p>
+          <div class="row"><button class="btn" id="zoomSite" type="button">Zoom to site</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="analytics">
+    <div class="card span-8">
+      <div class="card-head">
+        <h2>Measured vs predicted</h2>
+        <span class="sub" id="trendSite"></span>
+        <div class="seg spacer" role="group" aria-label="Time range" style="width:180px">
+          <button type="button" data-range="60" aria-pressed="true">1 h</button>
+          <button type="button" data-range="360" aria-pressed="false">6 h</button>
+          <button type="button" data-range="1440" aria-pressed="false">24 h</button>
+        </div>
+      </div>
+      <div class="card-body" style="display:grid;gap:8px">
+        <div class="chart-legend">
+          <span><i class="key-line" style="border-color:var(--measured)"></i>Measured LAeq (1-min)</span>
+          <span><i class="key-line dash" style="border-color:var(--predicted)"></i>Predicted (15-min ahead)</span>
+          <span><i class="key-line dot" style="border-color:var(--muted)"></i>WHO limit</span>
+          <span><i class="key-line dot" style="border-color:var(--crit)"></i>Alert threshold</span>
+        </div>
+        <div class="chart-box tall"><canvas id="trendChart" aria-label="Measured versus predicted noise level"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card span-4">
+      <div class="card-head"><h2>Phase-space portrait</h2><span class="sub">Delay embedding, τ = 1 min</span></div>
+      <div class="card-body" style="display:grid;gap:8px">
+        <div class="chart-box tall"><canvas id="phaseChart" aria-label="Reconstructed attractor"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card span-7">
+      <div class="card-head"><h2>24-hour profile</h2><span class="sub" id="profileSite"></span></div>
+      <div class="card-body" style="display:grid;gap:8px">
+        <div class="chart-legend">
+          <span><i class="key-sq" style="background:linear-gradient(90deg,#3a9d5d,#f0c02f,#d8412f)"></i>Hourly LAeq, colored by noise level</span>
+          <span><i class="key-line dot" style="border-color:var(--muted)"></i>WHO limit (55 day / 40 night)</span>
+        </div>
+        <div class="chart-box"><canvas id="profileChart" aria-label="Hourly noise level for the last 24 hours"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card span-5">
+      <div class="card-head"><h2>Noise source mix</h2><span class="sub">Share of minutes by detected source, last hour</span></div>
+      <div class="card-body" style="display:grid;gap:8px">
+        <div class="chart-legend" id="mixLegend"></div>
+        <div class="chart-box"><canvas id="mixChart" aria-label="Noise source mix per site"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card span-12">
+      <div class="card-head"><h2>Sensor sites</h2><span class="sub" id="tableSub"></span></div>
+      <div class="card-body table-wrap">
+        <table id="siteTable">
+          <thead><tr>
+            <th><button data-sort="name">Site</button></th>
+            <th><button data-sort="type">Setting</button></th>
+            <th class="r"><button data-sort="now">Now</button></th>
+            <th><button data-sort="band">Level</button></th>
+            <th class="r"><button data-sort="pred">+15 min</button></th>
+            <th class="r"><button data-sort="leq">LAeq 1 h</button></th>
+            <th class="r"><button data-sort="max">Lmax 1 h</button></th>
+            <th>Last hour</th>
+            <th><button data-sort="cat">Source</button></th>
+            <th class="r"><button data-sort="lle">λ</button></th>
+            <th><button data-sort="status">Status</button></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card span-6">
+      <div class="card-head">
+        <h2>Alerts</h2><span class="sub" id="alertSub"></span>
+        <button class="btn ghost spacer" id="ackAll" type="button">Acknowledge all</button>
+      </div>
+      <div class="card-body"><div class="alerts" id="alertList"></div></div>
+    </div>
+
+    <div class="card span-6">
+      <div class="card-head"><h2>Classifier comparison</h2><span class="tag">Placeholder results</span></div>
+      <div class="card-body table-wrap">
+        <table class="model-table">
+          <thead><tr><th>Model</th><th class="r">Accuracy</th><th class="r">Precision</th><th class="r">Recall</th><th class="r">F1</th></tr></thead>
+          <tbody id="modelBody"></tbody>
+        </table>
+        <p class="note" style="margin-top:10px">Replace with your evaluation results in <span class="mono">MODEL_RESULTS</span> (assets/core.js). The chaos-enhanced model adds λ, D₂ and Df to the MFCC, RMS and spectral features.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="analytics">
+    <div class="card span-12" id="planning">
+      <div class="card-head">
+        <h2>Planning report</h2><span class="sub">Last 24 hours · for LGU, DENR and DOH noise planning</span>
+        <button class="btn spacer" id="copyPlan" type="button">Copy report CSV</button>
+      </div>
+      <div class="card-body" style="display:grid;gap:10px">
+        <p class="note" id="planSummary" style="color:var(--ink-2);font-size:13px"></p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Site</th><th>Grade</th><th class="r">Lden</th><th class="r">Day 07–19</th><th class="r">Evening 19–23</th><th class="r">Night 23–07</th><th>Time above WHO day limit</th><th>Time above WHO night limit</th><th>Main source</th></tr></thead>
+            <tbody id="planBody"></tbody>
+          </table>
+        </div>
+        <p class="note">Lden is the day-evening-night level used in noise mapping: evening readings get a 5 dB penalty and night readings 10 dB. Grades: A under 55, B 55–60, C 60–65, D 65–70, E 70 dB and above. The same grades appear on the public map.</p>
+      </div>
+    </div>
+
+    <div class="card span-12" id="sitesCard">
+      <div class="card-head"><h2>Sensor sites</h2><span class="sub">Set maintenance or offline status, fix names and coordinates</span></div>
+      <div class="card-body" style="display:grid;gap:14px">
+        <div class="table-wrap">
+          <table class="edit-table">
+            <thead><tr><th>ID</th><th>Name</th><th>Setting</th><th>Latitude</th><th>Longitude</th><th>Status</th><th>Note</th><th class="r" data-admin-only></th></tr></thead>
+            <tbody id="siteAdminBody"></tbody>
+          </table>
+        </div>
+        <form id="addSiteForm" class="row" data-admin-only style="align-items:end">
+          <div class="field" style="width:80px"><label for="newSiteId">New ID</label><input type="text" id="newSiteId" placeholder="S10"></div>
+          <div class="field" style="flex:1 1 180px"><label for="newSiteName">Name</label><input type="text" id="newSiteName" placeholder="Site name"></div>
+          <div class="field" style="width:140px"><label for="newSiteSetting">Setting</label><select id="newSiteSetting"></select></div>
+          <div class="field" style="width:110px"><label for="newSiteLat">Latitude</label><input type="number" step="0.0001" id="newSiteLat" placeholder="14.5650"></div>
+          <div class="field" style="width:120px"><label for="newSiteLng">Longitude</label><input type="number" step="0.0001" id="newSiteLng" placeholder="120.9930"></div>
+          <button class="btn primary" type="submit">Add site</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card span-5" id="noticesCard">
+      <div class="card-head"><h2>Public notices</h2><span class="sub">Shown at the top of the public map</span></div>
+      <div class="card-body" style="display:grid;gap:14px">
+        <form id="noticeForm" class="form-grid" data-admin-only>
+          <div class="field span2"><label for="noticeTitle">Title</label><input type="text" id="noticeTitle" maxlength="120" required placeholder="e.g. Pandacan sensor under maintenance"></div>
+          <div class="field span2"><label for="noticeBody">Message</label><textarea id="noticeBody" rows="2" maxlength="500" placeholder="What residents should know"></textarea></div>
+          <div class="field"><label for="noticeType">Type</label><select id="noticeType"><option value="info">Information</option><option value="maintenance">Maintenance</option><option value="warning">Noise warning</option><option value="error">System problem</option></select></div>
+          <div class="field"><label for="noticeSite">Area</label><select id="noticeSite"></select></div>
+          <div class="field"><label for="noticeDays">Show for</label><select id="noticeDays"><option value="1">1 day</option><option value="3">3 days</option><option value="7" selected>1 week</option><option value="30">30 days</option><option value="0">Until removed</option></select></div>
+          <div class="field" style="align-self:end"><button class="btn primary" type="submit">Post notice</button></div>
+        </form>
+        <div id="noticeList" class="notices"></div>
+      </div>
+    </div>
+
+    <div class="card span-7">
+      <div class="card-head"><h2>Activity log</h2><span class="sub">Sign-ins, notices, site changes and rejected readings</span></div>
+      <div class="card-body table-wrap" style="max-height:320px;overflow:auto">
+        <table><thead><tr><th>Time</th><th>User</th><th>What happened</th></tr></thead><tbody id="logList"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>De La Salle University · Gokongwei College of Engineering · BS Computer Engineering thesis</span>
+    <span id="footStatus">Sensor locations and readings are placeholders until the prototype is connected.</span>
+  </footer>
+</main>
+
+<div class="drawer-scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-labelledby="drawerTitle">
+  <div class="row" style="justify-content:space-between">
+    <h2 id="drawerTitle">Data source</h2>
+    <button class="btn ghost" id="closeSettings" type="button">Close</button>
+  </div>
+  <p class="note">The dashboard runs on simulated placeholder data until you connect the Raspberry Pi. Switch to the prototype feed once its API is running.</p>
+  <div class="field">
+    <label for="cfgMode">Mode</label>
+    <select id="cfgMode">
+      <option value="simulated">Simulated placeholder data</option>
+      <option value="api">Prototype API (live)</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="cfgUrl">Readings endpoint</label>
+    <input type="url" id="cfgUrl" placeholder="/api/readings/latest">
+  </div>
+  <div class="field">
+    <label for="cfgPoll">Refresh every (seconds)</label>
+    <input type="number" id="cfgPoll" min="1" max="120" step="1">
+  </div>
+  <div class="row">
+    <button class="btn primary" id="applySettings" type="button">Apply</button>
+    <button class="btn" id="testSettings" type="button">Test connection</button>
+  </div>
+  <div class="msg" id="cfgMsg" hidden></div>
+  <div class="field">
+    <span class="lbl">Expected response (one object per site)</span>
+<pre>[
+  {
+    "site_id": "S01",
+    "timestamp": "2026-09-28T22:15:03+08:00",
+    "laeq_db": 71.4,
+    "predicted_db": 73.0,
+    "category": "vehicular",
+    "probabilities": {
+      "vehicular": 0.71, "commercial": 0.12,
+      "human": 0.09, "ambient": 0.06,
+      "industrial": 0.02
+    },
+    "lle": 0.084,
+    "corr_dim": 2.61,
+    "fractal_dim": 1.52
+  }
+]</pre>
+  </div>
+  <p class="note">Edit site names and coordinates under Sensor sites below, or in <span class="mono">DEFAULT_SITES</span> in assets/core.js. A response may also include <span class="mono">lat</span>, <span class="mono">lng</span> and <span class="mono">name</span> to add or move a site.</p>
+</aside>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script src="assets/core.js"></script>
+<script>
+"use strict";
+/* =====================================================================
+   MAP
+   ===================================================================== */
+const NM = createNoiseMap("map", { onSelect: id => selectSite(id, false), noticeEl: $("mapNotice") });
+const map = NM.map;
+NM.syncMarkers();
+
+function renderMap(statsById) {
+  const heatPts = [];
+  NM.zoneLayer.clearLayers();
+  const lim = limitAt(viewMinute() * MIN);
+  SITES.forEach(site => {
+    const st = statsById[site.id]; const mk = NM.ensureMarker(site);
+    const visible = passesFilter(site, st);
+    if (visible && $("layerMarkers").checked) NM.markerLayer.addLayer(mk); else NM.markerLayer.removeLayer(mk);
+    if (!visible) return;
+    const v = st.now;
+    if (v != null && site.status === "active") heatPts.push([site.lat, site.lng, clamp((v - 40) / 50, 0.05, 1)]);
+    const muted = site.status !== "active";
+    NM.paintPin(site, v, { selected: site.id === state.selected, alarm: v != null && v >= CONFIG.ALERT_DB, pred: state.view === "predicted", muted });
+    const cat = st.topCat ? CAT_BY_ID[st.topCat]?.label || st.topCat : "—";
+    mk.setTooltipContent(`<div class="tip-name">${esc(site.name)}</div>
+      <div class="tip-row"><span>${state.view === "predicted" ? "Predicted" : "Measured"}</span><b class="mono">${round1(v)} dB</b></div>
+      <div class="tip-row"><span>WHO limit</span><span class="mono">${lim} dB</span></div>
+      <div class="tip-row"><span>Source</span><span>${esc(cat)}</span></div>${site.status !== "active" ? `<div class="tip-row"><span>Status</span><b>${site.status === "maintenance" ? "Maintenance" : "Offline"}</b></div>` : ""}`);
+    if ($("layerZones").checked && st.leq != null && st.leq >= CONFIG.ALERT_DB) {
+      const crit = st.leq >= CONFIG.CRITICAL_DB - 5;
+      L.circle([site.lat, site.lng], { radius: crit ? 320 : 240, color: cssVar("--crit"), weight: 1.5, dashArray: "5 5", fillColor: cssVar("--crit"), fillOpacity: .08, interactive: false }).addTo(NM.zoneLayer);
+    }
+  });
+  NM.heatLayer.setLatLngs($("layerHeat").checked ? heatPts : []);
+  const label = state.view === "predicted" ? `Predicted +${CONFIG.FORECAST_HORIZON_MIN} min` : "Measured";
+  $("mapMode").textContent = state.offset === 0 ? `${label} · live` : `${label} · replay ${fmtHM.format(viewMinute() * MIN)}`;
+}
+
+/* =====================================================================
+   CHARTS
+   ===================================================================== */
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 11;
+Chart.defaults.animation = false;
+Chart.defaults.plugins.colors = { enabled: false };
+Chart.defaults.maintainAspectRatio = false;
+
+const nowLine = {
+  id: "nowLine",
+  afterDatasetsDraw(chart, _a, opts) {
+    if (opts.index == null) return;
+    const x = chart.scales.x.getPixelForValue(opts.index); const { top, bottom } = chart.chartArea;
+    const ctx = chart.ctx; ctx.save();
+    ctx.strokeStyle = cssVar("--muted"); ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = cssVar("--ink-2"); ctx.font = `600 10px ${Chart.defaults.font.family}`;
+    ctx.fillText("Now", x + 4, top + 10); ctx.restore();
+  },
+};
+function axisTheme() {
+  const grid = cssVar("--line"), tick = cssVar("--muted");
+  return { grid: { color: grid, drawTicks: false }, border: { display: false }, ticks: { color: tick, padding: 6 } };
+}
+function tooltipTheme() {
+  return { backgroundColor: cssVar("--surface"), titleColor: cssVar("--ink"), bodyColor: cssVar("--ink-2"), borderColor: cssVar("--line"), borderWidth: 1, padding: 9, cornerRadius: 8, boxPadding: 4, usePointStyle: true };
+}
+
+const trendChart = new Chart($("trendChart"), {
+  type: "line",
+  data: { labels: [], datasets: [
+    { label: "Measured", data: [], borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.15, spanGaps: false },
+    { label: "Predicted", data: [], borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+    { label: "WHO limit", data: [], borderWidth: 1, borderDash: [2, 3], pointRadius: 0, stepped: true },
+    { label: "Alert threshold", data: [], borderWidth: 1, borderDash: [2, 3], pointRadius: 0 },
+  ] },
+  options: {
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { display: false }, nowLine: {}, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.y == null ? "—" : c.parsed.y.toFixed(1)} dB` } } },
+    scales: { x: { ticks: { maxTicksLimit: 8, autoSkip: true, maxRotation: 0 } }, y: { suggestedMin: 40, suggestedMax: 90, title: { display: true, text: "dB(A)" } } },
+  },
+  plugins: [nowLine],
+});
+
+const profileChart = new Chart($("profileChart"), {
+  data: { labels: [], datasets: [
+    { type: "bar", label: "Hourly LAeq", data: [], backgroundColor: [], borderRadius: 4, borderSkipped: "start", barPercentage: 0.82, categoryPercentage: 0.95 },
+    { type: "line", label: "WHO limit", data: [], borderWidth: 1.5, borderDash: [2, 3], pointRadius: 0, stepped: "middle" },
+  ] },
+  options: {
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { display: false }, tooltip: { callbacks: { title: i => `${i[0].label}:00 – ${i[0].label}:59`, label: c => ` ${c.dataset.label}: ${c.parsed.y == null ? "—" : c.parsed.y.toFixed(1)} dB` } } },
+    scales: { x: { ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }, y: { min: 30, suggestedMax: 90, title: { display: true, text: "dB(A)" } } },
+  },
+});
+
+const mixChart = new Chart($("mixChart"), {
+  type: "bar",
+  data: { labels: [], datasets: CATEGORIES.map(c => ({ label: c.label, catId: c.id, data: [], borderWidth: { right: 2 }, borderSkipped: false, barPercentage: 0.72 })) },
+  options: {
+    indexAxis: "y",
+    plugins: { legend: { display: false }, tooltip: { mode: "y", intersect: false, callbacks: { label: c => ` ${c.dataset.label}: ${c.parsed.x.toFixed(0)}%` } } },
+    scales: { x: { stacked: true, max: 100, ticks: { callback: v => `${v}%` } }, y: { stacked: true } },
+  },
+});
+
+const phaseChart = new Chart($("phaseChart"), {
+  type: "scatter",
+  data: { datasets: [
+    { label: "Trajectory", data: [], showLine: true, borderWidth: 1, pointRadius: 0, order: 2 },
+    { label: "State", data: [], pointRadius: 2.5, pointHoverRadius: 5, order: 1 },
+    { label: "Latest", data: [], pointRadius: 6, pointHoverRadius: 7, borderWidth: 2, order: 0 },
+  ] },
+  options: {
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` L(t) ${c.parsed.x.toFixed(1)} → L(t+τ) ${c.parsed.y.toFixed(1)} dB` } } },
+    scales: { x: { title: { display: true, text: "L(t), dB" } }, y: { title: { display: true, text: "L(t + τ), dB" } } },
+  },
+});
+
+function themeCharts() {
+  const ax = axisTheme(), tt = tooltipTheme();
+  [trendChart, profileChart, mixChart, phaseChart].forEach(ch => {
+    Object.values(ch.options.scales).forEach(s => { Object.assign(s.grid ??= {}, ax.grid); Object.assign(s.border ??= {}, ax.border); Object.assign(s.ticks ??= {}, ax.ticks); if (s.title) s.title.color = cssVar("--muted"); });
+    Object.assign(ch.options.plugins.tooltip, tt);
+  });
+  const t = trendChart.data.datasets;
+  t[0].borderColor = cssVar("--measured"); t[0].backgroundColor = cssVar("--measured");
+  t[1].borderColor = cssVar("--predicted"); t[1].backgroundColor = cssVar("--predicted");
+  t[2].borderColor = cssVar("--muted"); t[3].borderColor = cssVar("--crit");
+  profileChart.data.datasets[1].borderColor = cssVar("--muted");
+  mixChart.data.datasets.forEach(d => { d.backgroundColor = cssVar(CAT_BY_ID[d.catId].color); d.borderColor = cssVar("--surface"); });
+  const acc = cssVar("--predicted");
+  phaseChart.data.datasets[0].borderColor = cssVar("--line") ;
+  phaseChart.data.datasets[1].backgroundColor = acc + "99"; phaseChart.data.datasets[1].borderColor = "transparent";
+  phaseChart.data.datasets[2].backgroundColor = cssVar("--ink"); phaseChart.data.datasets[2].borderColor = cssVar("--surface");
+  [trendChart, profileChart, mixChart, phaseChart].forEach(ch => ch.update());
+}
+
+function renderCharts(statsById) {
+  const site = SITES.find(s => s.id === state.selected); const h = state.history[site.id] || {};
+  const nowM = liveMinute(); const range = state.range; const step = range > 360 ? 5 : range > 60 ? 2 : 1;
+  const labels = [], meas = [], pred = [], who = [], alert = [];
+  let nowIdx = null;
+  for (let m = nowM - range + 1; m <= nowM + CONFIG.FORECAST_HORIZON_MIN; m += step) {
+    const vals = [], preds = [];
+    for (let k = 0; k < step; k++) { const b = h[m + k]; if (b?.db != null && m + k <= nowM) vals.push(b.db); if (b?.pred != null) preds.push(b.pred); }
+    if (m <= nowM && m + step > nowM) nowIdx = labels.length;
+    labels.push(fmtHM.format(m * MIN)); meas.push(m <= nowM ? leq(vals) : null); pred.push(preds.length ? leq(preds) : null);
+    who.push(limitAt(m * MIN)); alert.push(CONFIG.ALERT_DB);
+  }
+  trendChart.data.labels = labels;
+  [meas, pred, who, alert].forEach((d, i) => trendChart.data.datasets[i].data = d);
+  trendChart.options.plugins.nowLine.index = nowIdx;
+  trendChart.update("none");
+  $("trendSite").textContent = site.name;
+
+  // 24-hour hourly LAeq, ending with the current hour
+  const pl = [], pv = [], pc = [], pw = [];
+  const curHourStart = nowM - (nowM % 60);
+  for (let i = 23; i >= 0; i--) {
+    const start = curHourStart - i * 60; const vals = [];
+    for (let m = start; m < start + 60 && m <= nowM; m++) if (h[m]?.db != null) vals.push(h[m].db);
+    const v = leq(vals);
+    pl.push(fmtHour.format(start * MIN).padStart(2, "0")); pv.push(v); pc.push(v != null ? bandOf(v).color : "transparent"); pw.push(limitAt(start * MIN));
+  }
+  profileChart.data.labels = pl; profileChart.data.datasets[0].data = pv; profileChart.data.datasets[0].backgroundColor = pc; profileChart.data.datasets[1].data = pw;
+  profileChart.update("none");
+  $("profileSite").textContent = site.name;
+
+  // Source mix per visible site
+  const vis = SITES.filter(s => passesFilter(s, statsById[s.id]));
+  mixChart.data.labels = vis.map(s => s.short);
+  mixChart.data.datasets.forEach(d => d.data = vis.map(s => { const c = statsById[s.id].cats; const tot = Object.values(c).reduce((a, b) => a + b, 0) || 1; return 100 * (c[d.catId] || 0) / tot; }));
+  mixChart.update("none");
+
+  // Phase portrait from the last 4 hours
+  const series = windowVals(site.id, nowM, 240).filter(v => v != null);
+  const pts = []; for (let i = 0; i < series.length - 1; i++) pts.push({ x: series[i], y: series[i + 1] });
+  phaseChart.data.datasets[0].data = pts; phaseChart.data.datasets[1].data = pts; phaseChart.data.datasets[2].data = pts.slice(-1);
+  phaseChart.update("none");
+}
+
+/* =====================================================================
+   PANEL, KPIs, TABLE, ALERTS
+   ===================================================================== */
+const ICON = {
+  ok: `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.5 6.2l2.2 2.2 4.8-4.8"/></svg>`,
+  warn: `<svg viewBox="0 0 12 12" fill="currentColor"><path d="M6 1l5 9.5H1z"/></svg>`,
+  crit: `<svg viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="5"/></svg>`,
+  tool: `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7.5 1.5a2.5 2.5 0 0 0-2.3 3.4L1.5 8.6l1.9 1.9 3.7-3.7a2.5 2.5 0 0 0 3.3-3.1L8.9 5.2 7.4 4.6 6.8 3.1z"/></svg>`,
+  off: `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3l6 6M9 3l-6 6"/></svg>`,
+};
+function statusOf(st) {
+  if (st.status === "maintenance") return { cls: "warn", icon: ICON.tool, text: "Maintenance", rank: 0 };
+  if (st.status === "offline") return { cls: "", icon: ICON.off, text: "Offline", rank: 0 };
+  if (!st.online) return { cls: "", icon: ICON.off, text: "Offline", rank: 0 };
+  const v = st.measuredNow;
+  if (v != null && v >= CONFIG.CRITICAL_DB) return { cls: "crit", icon: ICON.crit, text: "Critical", rank: 3 };
+  if (v != null && v >= CONFIG.ALERT_DB) return { cls: "warn", icon: ICON.warn, text: "Alert", rank: 2 };
+  return { cls: "ok", icon: ICON.ok, text: "Normal", rank: 1 };
+}
+const bandChip = v => { if (v == null) return ""; const b = bandOf(v); return `<span class="band" style="background:${b.color};color:${b.text}">${b.label}</span>`; };
+
+function renderPanel(st) {
+  const site = SITES.find(s => s.id === state.selected); const lim = limitAt(viewMinute() * MIN);
+  $("siteSelect").value = site.id;
+  $("pName").textContent = site.name;
+  $("pType").textContent = `${site.setting} · ${site.id}`;
+  $("pCoord").textContent = `${site.lat.toFixed(4)}° N, ${site.lng.toFixed(4)}° E`;
+  const s = statusOf(st);
+  const seen = state.lastSeen[site.id];
+  $("pStatus").innerHTML = `<span class="status ${s.cls}">${s.icon}${s.text}</span><span class="sub">${seen ? `Last reading ${fmtHMS.format(seen)}` : "No readings yet"}</span>`;
+  const m = st.measuredNow;
+  $("pNow").innerHTML = `${round1(m)}<small>dB</small>`;
+  $("pBand").innerHTML = m != null ? `${bandChip(m)}<span class="sub">${m > lim ? `+${(m - lim).toFixed(1)} dB over` : `${(lim - m).toFixed(1)} dB under`} WHO ${lim} dB</span>` : "";
+  $("pPred").innerHTML = `${round1(st.pred)}<small>dB</small>`;
+  if (st.pred != null && m != null) { const d = st.pred - m; $("pDelta").textContent = `${d >= 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(1)} dB vs now${st.pred >= CONFIG.ALERT_DB ? " · above alert level" : ""}`; } else $("pDelta").textContent = "";
+  $("pLeq").textContent = round1(st.leq); $("pMax").textContent = isFinite(st.max) ? round1(st.max) : "--"; $("pL10").textContent = round1(st.l10); $("pL90").textContent = round1(st.l90);
+
+  const latest = state.latest[site.id]; const probs = latest?.probs || {};
+  const top = st.topCat;
+  $("pClass").innerHTML = top ? `Detected: <b style="color:var(--ink)">${esc(CAT_BY_ID[top]?.label || top)}</b>${probs[top] != null ? ` · ${(probs[top] * 100).toFixed(0)}% confidence` : ""}` : "Waiting for classification";
+  $("pProbs").innerHTML = CATEGORIES.map(c => { const p = probs[c.id] ?? 0; return `<div class="prob ${c.id === top ? "top" : ""}"><span>${c.label}</span><span class="prob-track"><span class="prob-fill" style="width:${(p * 100).toFixed(1)}%;background:var(${c.color})"></span></span><span class="mono">${(p * 100).toFixed(0)}%</span></div>`; }).join("");
+
+  $("pLle").textContent = st.lle != null ? st.lle.toFixed(3) : "--";
+  $("pD2").textContent = st.d2 != null ? st.d2.toFixed(2) : "--";
+  $("pDf").textContent = st.df != null ? st.df.toFixed(2) : "--";
+  const cs = $("pChaosState");
+  if (st.lle == null) { cs.className = "status"; cs.textContent = "No data"; }
+  else if (st.lle > 0) { cs.className = "status warn"; cs.innerHTML = `${ICON.warn}Chaotic (λ &gt; 0)`; }
+  else { cs.className = "status ok"; cs.innerHTML = `${ICON.ok}Stable (λ ≤ 0)`; }
+}
+
+function renderKpis(statsById) {
+  const ms = viewMinute() * MIN; const lim = limitAt(ms);
+  const vis = SITES.filter(s => passesFilter(s, statsById[s.id]));
+  const vals = vis.map(s => statsById[s.id].now).filter(v => v != null);
+  const net = leq(vals);
+  $("kNet").innerHTML = `${round1(net)}<small>dB</small>`;
+  $("kNetSub").innerHTML = net != null ? `${bandOf(net).label} · ${vis.length} of ${SITES.length} sites shown` : "No data";
+  const loud = vis.map(s => [s, statsById[s.id].now]).filter(x => x[1] != null).sort((a, b) => b[1] - a[1])[0];
+  $("kLoud").innerHTML = loud ? `${round1(loud[1])}<small>dB</small>` : "--";
+  $("kLoudSub").textContent = loud ? loud[0].name : "—";
+  const over = vis.filter(s => (statsById[s.id].now ?? 0) > lim).length;
+  $("kOver").innerHTML = `${over}<small>of ${vis.length}</small>`;
+  $("kOverSub").textContent = `${isDay(ms) ? "Daytime" : "Night"} limit ${lim} dB`;
+  const active = state.alerts.filter(a => !a.end);
+  const crit = active.filter(a => a.type === "crit").length, warn = active.filter(a => a.type === "warn").length, info = active.filter(a => a.type === "info").length;
+  $("kAlerts").innerHTML = `${active.length}<small>${active.filter(a => !a.ack).length} new</small>`;
+  $("kAlertsSub").textContent = `${crit} critical · ${warn} warning · ${info} forecast`;
+  // MAE between measured and predicted over the last 60 minutes
+  let err = 0, n = 0; const nowM = liveMinute();
+  vis.forEach(s => { const h = state.history[s.id]; for (let m = nowM - 60; m < nowM; m++) { const b = h[m]; if (b?.db != null && b.pred != null) { err += Math.abs(b.db - b.pred); n++; } } });
+  $("kMae").innerHTML = n ? `${(err / n).toFixed(2)}<small>dB MAE</small>` : "--";
+  const nextPeak = vis.map(s => [s, statsById[s.id].pred]).filter(x => x[1] != null).sort((a, b) => b[1] - a[1])[0];
+  $("kMaeSub").textContent = nextPeak ? `Next peak ${nextPeak[1].toFixed(1)} dB at ${nextPeak[0].short}` : "—";
+  const online = SITES.filter(s => statsById[s.id].online).length;
+  $("kNodes").innerHTML = `${online}<small>of ${SITES.length} online</small>`;
+  $("kNodesSub").textContent = state.mode === "simulated" ? "Raspberry Pi 4 + INMP441 (simulated)" : (state.sourceError ? "Feed error, see Data source" : "Raspberry Pi 4 + INMP441");
+  $("limitText").textContent = `${isDay(ms) ? "Daytime" : "Night"} · WHO ${lim} dB`;
+}
+
+function sparkline(vals) {
+  const w = 96, h = 24; const v = vals.map(x => x ?? null); const nums = v.filter(x => x != null);
+  if (nums.length < 2) return "";
+  const lo = Math.min(...nums, 45), hi = Math.max(...nums, 80);
+  const xs = i => (i / (v.length - 1)) * (w - 4) + 2, ys = y => h - 2 - ((y - lo) / (hi - lo)) * (h - 4);
+  let d = ""; v.forEach((y, i) => { if (y == null) return; d += `${d ? "L" : "M"}${xs(i).toFixed(1)},${ys(y).toFixed(1)}`; });
+  const last = v.length - 1 - [...v].reverse().findIndex(x => x != null);
+  const area = `${d}L${xs(last).toFixed(1)},${h}L2,${h}Z`;
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <line x1="2" x2="${w - 2}" y1="${ys(CONFIG.ALERT_DB).toFixed(1)}" y2="${ys(CONFIG.ALERT_DB).toFixed(1)}" stroke="var(--crit)" stroke-width="1" stroke-dasharray="2 2" opacity=".6"/>
+    <path d="${area}" fill="var(--predicted)" opacity=".12"/>
+    <path d="${d}" fill="none" stroke="var(--ink-2)" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="${xs(last).toFixed(1)}" cy="${ys(v[last]).toFixed(1)}" r="2.5" fill="var(--ink)"/></svg>`;
+}
+
+function renderTable(statsById) {
+  const vis = SITES.filter(s => passesFilter(s, statsById[s.id]));
+  const key = state.sort.key, dir = state.sort.dir;
+  const val = s => { const st = statsById[s.id]; return ({ name: s.name, type: s.setting, now: st.now ?? -1, band: st.now ?? -1, pred: st.pred ?? -1, leq: st.leq ?? -1, max: st.max ?? -1, cat: st.topCat || "", lle: st.lle ?? -9, status: statusOf(st).rank })[key]; };
+  vis.sort((a, b) => { const x = val(a), y = val(b); return (x > y ? 1 : x < y ? -1 : 0) * dir; });
+  $("siteTable").querySelector("tbody").innerHTML = vis.map(s => {
+    const st = statsById[s.id]; const stt = statusOf(st); const cat = CAT_BY_ID[st.topCat];
+    return `<tr data-id="${s.id}" class="${s.id === state.selected ? "sel" : ""}" tabindex="0">
+      <td><b>${esc(s.name)}</b><div class="sub mono">${s.id}</div></td>
+      <td>${esc(s.setting)}</td>
+      <td class="r mono">${round1(st.now)}</td>
+      <td>${bandChip(st.now)}</td>
+      <td class="r mono" style="color:var(--predicted)">${round1(st.pred)}</td>
+      <td class="r mono">${round1(st.leq)}</td>
+      <td class="r mono">${isFinite(st.max) ? round1(st.max) : "--"}</td>
+      <td>${sparkline(st.hour)}</td>
+      <td>${cat ? `<span class="row" style="gap:6px"><span class="key-sq" style="background:var(${cat.color})"></span>${cat.label}</span>` : "—"}</td>
+      <td class="r mono">${st.lle != null ? st.lle.toFixed(3) : "--"}</td>
+      <td><span class="status ${stt.cls}">${stt.icon}${stt.text}</span></td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="sub">No sites match the current filters.</td></tr>`;
+  $("tableSub").textContent = `${vis.length} of ${SITES.length} sites · values at ${state.offset === 0 ? "live" : fmtHM.format(viewMinute() * MIN)}`;
+  document.querySelectorAll("#siteTable th button").forEach(b => { b.textContent = b.textContent.replace(/ [▲▼]$/, "") + (b.dataset.sort === key ? (dir > 0 ? " ▲" : " ▼") : ""); });
+}
+
+function renderAlerts() {
+  const siteName = id => SITES.find(s => s.id === id)?.name || id;
+  const TITLES = { crit: "Critical noise level", warn: "Noise above alert level", info: "Exceedance forecast", offline: "Sensor node offline" };
+  const cls = { crit: "crit", warn: "warn", info: "info", offline: "warn" };
+  const list = [...state.alerts].sort((a, b) => (!!a.end - !!b.end) || b.start - a.start).slice(0, 40);
+  $("alertList").innerHTML = list.map(a => {
+    const when = a.end ? `${fmtHM.format(a.start)}–${fmtHM.format(a.end)}` : `since ${fmtHM.format(a.start)}`;
+    const detail = a.type === "info" ? `forecast ${round1(a.peak)} dB in ${CONFIG.FORECAST_HORIZON_MIN} min` : a.type === "offline" ? "no data received" : `peak ${round1(a.peak)} dB`;
+    return `<div class="alert ${cls[a.type]} ${a.end ? "resolved" : ""}">
+      <span class="bar"></span>
+      <div><div class="alert-title">${TITLES[a.type]} · ${esc(siteName(a.site))}</div><div class="alert-meta mono">${when} · ${detail}${a.end ? " · resolved" : ""}</div></div>
+      <div>${!a.end && !a.ack ? `<button class="btn" data-ack="${a.id}" type="button">Acknowledge</button>` : `<span class="sub">${a.end ? "" : "Acknowledged"}</span>`}</div></div>`;
+  }).join("") || `<p class="note">No alerts in the last 24 hours.</p>`;
+  const active = state.alerts.filter(a => !a.end).length;
+  $("alertSub").textContent = `${active} active · warning at ${CONFIG.ALERT_DB} dB, critical at ${CONFIG.CRITICAL_DB} dB`;
+}
+
+function renderModels() {
+  const keys = ["accuracy", "precision", "recall", "f1"];
+  const best = Object.fromEntries(keys.map(k => [k, Math.max(...MODEL_RESULTS.map(r => r[k]))]));
+  $("modelBody").innerHTML = MODEL_RESULTS.map(r => `<tr style="cursor:default"><td>${esc(r.name)}</td>${keys.map(k => `<td class="r mono ${r[k] === best[k] ? "bestcell" : ""}">${(r[k] * 100).toFixed(1)}%</td>`).join("")}</tr>`).join("");
+}
+
+function renderSource() {
+  const dot = $("sourceDot"), txt = $("sourceText");
+  if (state.mode === "simulated") { dot.className = "dot sim"; txt.textContent = "Simulated data"; $("footStatus").textContent = "Sensor locations and readings are placeholders until the prototype is connected."; }
+  else if (state.sourceError) { dot.className = "dot err"; txt.textContent = "Prototype feed error"; $("footStatus").textContent = state.sourceError; }
+  else { dot.className = "dot live"; txt.textContent = "Live · prototype"; $("footStatus").textContent = `Polling ${CONFIG.API_URL} every ${CONFIG.POLL_SECONDS} s.`; }
+}
+
+function renderAll() {
+  const statsById = Object.fromEntries(SITES.map(s => [s.id, siteStats(s)]));
+  renderKpis(statsById); renderMap(statsById); renderPanel(statsById[state.selected]); renderCharts(statsById); renderTable(statsById); renderAlerts(); renderSource(); renderPlanning();
+  const hidden = SITES.length - SITES.filter(s => passesFilter(s, statsById[s.id])).length;
+  $("filterNote").textContent = hidden ? `${hidden} site${hidden > 1 ? "s" : ""} hidden by filters.` : "All sites shown.";
+}
+
+/* =====================================================================
+   INTERACTION
+   ===================================================================== */
+function buildSiteOptions() { $("siteSelect").innerHTML = SITES.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join(""); }
+function selectSite(id, pan = true) {
+  state.selected = id; store("nma.site", id);
+  const s = SITES.find(x => x.id === id);
+  if (pan && s) map.panTo([s.lat, s.lng]);
+  renderAll();
+}
+buildSiteOptions();
+$("siteSelect").addEventListener("change", e => selectSite(e.target.value));
+$("zoomSite").addEventListener("click", () => { const s = SITES.find(x => x.id === state.selected); map.flyTo([s.lat, s.lng], 17, { duration: .6 }); });
+$("siteTable").addEventListener("click", e => {
+  const th = e.target.closest("th button");
+  if (th) { const k = th.dataset.sort; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (k === "name" || k === "type" || k === "cat" ? 1 : -1) }; renderAll(); return; }
+  const tr = e.target.closest("tr[data-id]"); if (tr) selectSite(tr.dataset.id);
+});
+$("siteTable").addEventListener("keydown", e => { const tr = e.target.closest("tr[data-id]"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selectSite(tr.dataset.id); } });
+
+$("catChips").innerHTML = CATEGORIES.map(c => `<button type="button" class="chip" data-cat="${c.id}" aria-pressed="true"><span class="sw" style="background:var(${c.color})"></span>${c.label}</button>`).join("");
+$("catChips").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", on);
+  on ? state.filters.cats.add(b.dataset.cat) : state.filters.cats.delete(b.dataset.cat); renderAll();
+});
+$("minDb").addEventListener("input", e => { state.filters.minDb = +e.target.value; $("minDbVal").textContent = `${e.target.value} dB`; renderAll(); });
+$("onlyOver").addEventListener("change", e => { state.filters.onlyOver = e.target.checked; renderAll(); });
+["layerMarkers", "layerHeat", "layerZones"].forEach(id => $(id).addEventListener("change", renderAll));
+$("basemap").addEventListener("change", () => { store("nma.basemap", $("basemap").value); if ($("basemap").value !== "schematic") NM.resetFailure(); NM.setBasemap($("basemap").value); });
+function setView(v) { state.view = v; $("viewMeasured").setAttribute("aria-pressed", v === "measured"); $("viewPredicted").setAttribute("aria-pressed", v === "predicted"); renderAll(); }
+$("viewMeasured").addEventListener("click", () => setView("measured"));
+$("viewPredicted").addEventListener("click", () => setView("predicted"));
+document.querySelectorAll("[data-range]").forEach(b => b.addEventListener("click", () => {
+  state.range = +b.dataset.range; document.querySelectorAll("[data-range]").forEach(x => x.setAttribute("aria-pressed", x === b)); renderAll();
+}));
+
+$("legend").innerHTML = BANDS.map(b => `<div class="legend-row"><span class="sw" style="background:${b.color}"></span><span>${b.label}</span><span class="mono">${b.range} dB</span></div>`).join("");
+const mixLegend = CATEGORIES.map(c => `<span><i class="key-sq" style="background:var(${c.color})"></i>${c.label}</span>`).join("");
+$("mixLegend").innerHTML = mixLegend;
+
+// Replay
+let playTimer = null;
+function setOffset(v) {
+  state.offset = clamp(v, -1439, 0); $("scrub").value = state.offset;
+  $("scrubTime").textContent = state.offset === 0 ? "Live" : `${fmtHM.format(viewMinute() * MIN)} (${Math.round(-state.offset / 60 * 10) / 10} h ago)`;
+  renderAll();
+}
+function stopPlay() { clearInterval(playTimer); playTimer = null; $("playLabel").textContent = "Replay 24 h"; $("playIcon").innerHTML = `<path d="M4 2.5v11l9-5.5z"/>`; }
+$("scrub").addEventListener("input", e => { stopPlay(); setOffset(+e.target.value); });
+$("liveBtn").addEventListener("click", () => { stopPlay(); setOffset(0); });
+$("playBtn").addEventListener("click", () => {
+  if (playTimer) { stopPlay(); return; }
+  if (state.offset >= -5) setOffset(-1439);
+  $("playLabel").textContent = "Pause"; $("playIcon").innerHTML = `<path d="M4 2.5h3v11H4zM9 2.5h3v11H9z"/>`;
+  playTimer = setInterval(() => { if (state.offset >= 0) { stopPlay(); return; } setOffset(state.offset + 10); }, 120);
+});
+
+// CSV
+$("copyCsv").addEventListener("click", () => {
+  const rows = [["site_id", "name", "lat", "lng", "time", "laeq_db", "predicted_db", "laeq_1h", "lmax_1h", "category", "lle", "corr_dim", "fractal_dim"]];
+  SITES.forEach(s => { const st = siteStats(s); rows.push([s.id, s.name, s.lat, s.lng, new Date(viewMinute() * MIN).toISOString(), st.now?.toFixed(1), st.pred?.toFixed(1), st.leq?.toFixed(1), isFinite(st.max) ? st.max.toFixed(1) : "", st.topCat || "", st.lle ?? "", st.d2 ?? "", st.df ?? ""]); });
+  const csv = rows.map(r => r.map(x => `"${String(x ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  const fallback = () => { const ta = document.createElement("textarea"); ta.value = csv; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); toast("Copied current readings as CSV"); } catch (e) { toast("Copy is blocked here. Select the text manually."); } ta.remove(); };
+  try { navigator.clipboard.writeText(csv).then(() => toast("Copied current readings as CSV"), fallback); } catch (e) { fallback(); }
+});
+
+$("alertList").addEventListener("click", e => { const b = e.target.closest("[data-ack]"); if (!b) return; const a = state.alerts.find(x => x.id === b.dataset.ack); if (a) a.ack = true; renderAll(); });
+$("ackAll").addEventListener("click", () => { state.alerts.forEach(a => a.ack = true); renderAll(); toast("All alerts acknowledged"); });
+
+// Settings drawer
+function openDrawer(open) { $("drawer").hidden = !open; $("scrim").hidden = !open; if (open) { $("cfgMode").value = state.mode; $("cfgUrl").value = CONFIG.API_URL; $("cfgPoll").value = CONFIG.POLL_SECONDS; $("cfgMsg").hidden = true; $("cfgMode").focus(); } }
+$("openSettings").addEventListener("click", () => openDrawer(true));
+$("closeSettings").addEventListener("click", () => openDrawer(false));
+$("scrim").addEventListener("click", () => openDrawer(false));
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("drawer").hidden) openDrawer(false); });
+function showMsg(text, kind) { const m = $("cfgMsg"); m.hidden = false; m.className = `msg ${kind || ""}`; m.textContent = text; }
+$("testSettings").addEventListener("click", async () => {
+  const url = $("cfgUrl").value.trim() || CONFIG.API_URL;
+  showMsg(`Contacting ${url}…`);
+  try {
+    const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(`answered ${r.status}`);
+    const b = await r.json(); const list = Array.isArray(b) ? b : (b.readings || []);
+    showMsg(`Connected. Received ${list.length} reading${list.length === 1 ? "" : "s"}.`, "ok");
+  } catch (e) { showMsg(`Could not read ${url} (${e.message}). Check that the Pi server is running, the address is right, and you are on the same network.`, "err"); }
+});
+$("applySettings").addEventListener("click", async () => {
+  const mode = $("cfgMode").value; CONFIG.API_URL = $("cfgUrl").value.trim() || CONFIG.API_URL; CONFIG.POLL_SECONDS = clamp(+$("cfgPoll").value || 5, 1, 120);
+  store("nma.cfg", { mode, url: CONFIG.API_URL, poll: CONFIG.POLL_SECONDS });
+  await switchMode(mode); openDrawer(false); toast(mode === "api" ? "Switched to the prototype feed" : "Switched to simulated data");
+});
+
+/* =====================================================================
+   SIGN-IN
+   Administrators manage notices and sensor sites. Government planners get
+   the full dashboard and planning report, read-only.
+   ===================================================================== */
+const Auth = {
+  user: null,
+  async init() {
+    await Backend.detect();
+    $("demoHint").hidden = Backend.mode !== "demo";
+    const me = await Backend.me();
+    if (me) this.enter(me); else this.showLogin();
+  },
+  showLogin() {
+    document.body.classList.add("locked");
+    $("login").hidden = false; $("loginUser").focus();
+  },
+  enter(user) {
+    this.user = user;
+    document.body.classList.remove("locked");
+    $("login").hidden = true;
+    $("userName").textContent = user.name || user.username;
+    $("userRole").textContent = ROLE_LABEL[user.role] || user.role;
+    const admin = user.role === "admin";
+    document.querySelectorAll("[data-admin-only]").forEach(el => el.hidden = !admin);
+    startDashboard();
+  },
+  async logout() {
+    await Backend.logout();
+    this.user = null;
+    $("loginPass").value = "";
+    this.showLogin();
+  },
+};
+$("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const err = $("loginError"); err.hidden = true;
+  $("loginBtn").disabled = true;
+  try { Auth.enter(await Backend.login($("loginUser").value, $("loginPass").value)); }
+  catch (ex) { err.hidden = false; err.textContent = ex.message || "Could not sign in."; }
+  finally { $("loginBtn").disabled = false; }
+});
+$("logoutBtn").addEventListener("click", () => Auth.logout());
+
+/* =====================================================================
+   MANAGEMENT: notices, sensor sites, activity log
+   ===================================================================== */
+const NOTICE_TYPES = { info: "Information", maintenance: "Maintenance", warning: "Noise warning", error: "System problem" };
+let notices = [];
+
+async function refreshManagement() {
+  const [overrides, list] = await Promise.all([Backend.siteOverrides(), Backend.notices()]);
+  applySiteOverrides(overrides);
+  notices = list || [];
+  renderNotices(); renderSiteAdmin(); renderLog();
+}
+
+function renderNotices() {
+  $("noticeSite").innerHTML = `<option value="">Whole network</option>` + SITES.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+  $("noticeList").innerHTML = notices.length ? notices.map(n => `
+    <div class="notice-row">
+      <span class="status ${n.type === "warning" || n.type === "error" ? "warn" : n.type === "maintenance" ? "" : "ok"}">${esc(NOTICE_TYPES[n.type] || n.type)}</span>
+      <div><div class="alert-title">${esc(n.title)}</div>
+        <div class="alert-meta">${esc(n.body || "")}</div>
+        <div class="alert-meta mono">${n.site_id ? esc(SITES.find(s => s.id === n.site_id)?.name || n.site_id) + " · " : ""}posted ${n.created ? fmtDate(n.created) : ""}${n.author ? ` by ${esc(n.author)}` : ""}${n.expires ? ` · until ${fmtDate(n.expires)}` : ""}</div></div>
+      <button class="btn" type="button" data-remove-notice="${esc(n.id)}" data-admin-only ${Auth.user?.role === "admin" ? "" : "hidden"}>Remove</button>
+    </div>`).join("") : `<p class="note">No notices are showing on the public map.</p>`;
+}
+const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.toLocaleDateString("en-PH", { timeZone: CONFIG.TIMEZONE, month: "short", day: "numeric" })} ${fmtHM.format(d)}`; };
+
+$("noticeForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const title = $("noticeTitle").value.trim(); if (!title) return;
+  const days = +$("noticeDays").value;
+  try {
+    await Backend.addNotice({ title, body: $("noticeBody").value.trim(), type: $("noticeType").value, site_id: $("noticeSite").value || null, expires: days ? new Date(Date.now() + days * 86400000).toISOString() : null });
+    $("noticeTitle").value = ""; $("noticeBody").value = "";
+    toast("Notice posted to the public map");
+    await refreshManagement();
+  } catch (ex) { toast(ex.message); }
+});
+$("noticeList").addEventListener("click", async e => {
+  const b = e.target.closest("[data-remove-notice]"); if (!b) return;
+  try { await Backend.removeNotice(b.dataset.removeNotice); toast("Notice removed"); await refreshManagement(); } catch (ex) { toast(ex.message); }
+});
+
+const SETTINGS = ["Roadside", "Transit hub", "Market", "Industrial", "School", "Residential", "Public space"];
+function renderSiteAdmin() {
+  const isAdmin = Auth.user?.role === "admin";
+  $("siteAdminBody").innerHTML = SITES.map(s => `
+    <tr data-site="${s.id}">
+      <td class="mono">${s.id}</td>
+      <td><input type="text" data-f="name" value="${esc(s.name)}" aria-label="Name of ${s.id}" ${isAdmin ? "" : "disabled"}></td>
+      <td><select data-f="setting" aria-label="Setting of ${s.id}" ${isAdmin ? "" : "disabled"}>${SETTINGS.map(x => `<option ${x === s.setting ? "selected" : ""}>${x}</option>`).join("")}</select></td>
+      <td><input type="number" step="0.0001" data-f="lat" value="${s.lat}" aria-label="Latitude of ${s.id}" style="width:104px" ${isAdmin ? "" : "disabled"}></td>
+      <td><input type="number" step="0.0001" data-f="lng" value="${s.lng}" aria-label="Longitude of ${s.id}" style="width:112px" ${isAdmin ? "" : "disabled"}></td>
+      <td><select data-f="status" aria-label="Status of ${s.id}" ${isAdmin ? "" : "disabled"}>
+        <option value="active" ${s.status === "active" ? "selected" : ""}>Active</option>
+        <option value="maintenance" ${s.status === "maintenance" ? "selected" : ""}>Maintenance</option>
+        <option value="offline" ${s.status === "offline" ? "selected" : ""}>Offline</option></select></td>
+      <td><input type="text" data-f="note" value="${esc(s.note || "")}" placeholder="e.g. microphone replaced" aria-label="Note for ${s.id}" ${isAdmin ? "" : "disabled"}></td>
+      <td class="r" ${isAdmin ? "" : "hidden"}><div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn" type="button" data-save-site>Save</button><button class="btn ghost" type="button" data-remove-site title="Remove site">Remove</button></div></td>
+    </tr>`).join("");
+}
+$("siteAdminBody").addEventListener("click", async e => {
+  const tr = e.target.closest("tr[data-site]"); if (!tr) return;
+  const site = SITES.find(s => s.id === tr.dataset.site);
+  if (e.target.closest("[data-save-site]")) {
+    const f = Object.fromEntries([...tr.querySelectorAll("[data-f]")].map(el => [el.dataset.f, el.value]));
+    if (isNaN(+f.lat) || isNaN(+f.lng) || Math.abs(+f.lat) > 90 || Math.abs(+f.lng) > 180) { toast("Latitude or longitude is not valid."); return; }
+    try { await Backend.saveSite({ ...site, ...f, short: site.short }); toast(`Saved ${site.id}`); await refreshManagement(); renderAll(); } catch (ex) { toast(ex.message); }
+  }
+  if (e.target.closest("[data-remove-site]")) {
+    const btn = e.target.closest("[data-remove-site]");
+    if (btn.dataset.confirm !== "1") { btn.dataset.confirm = "1"; btn.textContent = "Confirm remove"; btn.classList.remove("ghost"); setTimeout(() => { btn.dataset.confirm = ""; btn.textContent = "Remove"; btn.classList.add("ghost"); }, 4000); return; }
+    try { await Backend.removeSite(site.id); toast(`Removed ${site.id}`); await refreshManagement(); renderAll(); } catch (ex) { toast(ex.message); }
+  }
+});
+$("addSiteForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const id = $("newSiteId").value.trim().toUpperCase(), name = $("newSiteName").value.trim(), lat = +$("newSiteLat").value, lng = +$("newSiteLng").value;
+  if (!/^[A-Z0-9_-]{1,12}$/.test(id)) { toast("Use a short ID such as S10 (letters, numbers, - or _)."); return; }
+  if (SITES.some(s => s.id === id)) { toast(`${id} already exists.`); return; }
+  if (!name || isNaN(lat) || isNaN(lng) || !$("newSiteLat").value || !$("newSiteLng").value) { toast("Enter a name, latitude and longitude."); return; }
+  try {
+    await Backend.saveSite({ id, name, short: name.slice(0, 14), setting: $("newSiteSetting").value, lat, lng, status: "active", note: "" });
+    e.target.reset(); toast(`Added ${id}. It appears on the map once it sends readings.`);
+    await refreshManagement(); renderAll();
+  } catch (ex) { toast(ex.message); }
+});
+$("newSiteSetting").innerHTML = SETTINGS.map(x => `<option>${x}</option>`).join("");
+
+async function renderLog() {
+  const log = await Backend.log();
+  $("logList").innerHTML = (log || []).slice(0, 60).map(l => `<tr><td class="mono">${fmtDate(l.ts)}</td><td>${esc(l.user || "")}</td><td>${esc(l.detail || l.action)}</td></tr>`).join("")
+    || `<tr><td colspan="3" class="sub">No activity recorded yet.</td></tr>`;
+}
+
+/* =====================================================================
+   PLANNING REPORT (government planners and admins)
+   ===================================================================== */
+function planningRows() {
+  return SITES.map(s => ({ site: s, p: periodLevels(s.id), st: siteStats(s) }))
+    .sort((a, b) => (b.p.Lden ?? -1) - (a.p.Lden ?? -1));
+}
+function renderPlanning() {
+  const rows = planningRows();
+  const pctCell = v => v == null ? "--" : `<span class="pctbar"><i style="width:${v.toFixed(0)}%"></i></span><span class="mono">${v.toFixed(0)}%</span>`;
+  $("planBody").innerHTML = rows.map(({ site, p, st }) => {
+    const g = gradeOf(p.Lden);
+    return `<tr data-id="${site.id}">
+      <td><b>${esc(site.name)}</b><div class="sub">${esc(site.setting)}</div></td>
+      <td>${g ? `<span class="band" style="background:${g.color};color:${g.text}">${g.letter} · ${g.label}</span>` : "--"}</td>
+      <td class="r mono"><b>${round1(p.Lden)}</b></td>
+      <td class="r mono">${round1(p.Ld)}</td><td class="r mono">${round1(p.Le)}</td><td class="r mono">${round1(p.Ln)}</td>
+      <td>${pctCell(p.overDayPct)}</td><td>${pctCell(p.overNightPct)}</td>
+      <td>${st.topCat ? esc(CAT_BY_ID[st.topCat]?.label || st.topCat) : "—"}</td></tr>`;
+  }).join("");
+  const graded = rows.filter(r => r.p.Lden != null);
+  const loud = graded.filter(r => r.p.Lden >= 65).length;
+  const nightBad = graded.filter(r => (r.p.overNightPct ?? 0) > 50).length;
+  $("planSummary").textContent = graded.length
+    ? `${loud} of ${graded.length} sites have Lden of 65 dB or more (grade D or E). ${nightBad} exceed the WHO night guideline for more than half of the night.`
+    : "Not enough data yet. The report needs readings from the last 24 hours.";
+}
+$("planBody").addEventListener("click", e => { const tr = e.target.closest("tr[data-id]"); if (tr) { selectSite(tr.dataset.id); $("map").scrollIntoView({ behavior: "smooth", block: "center" }); } });
+$("copyPlan").addEventListener("click", () => {
+  const rows = [["site_id", "name", "setting", "lat", "lng", "grade", "lden_db", "lday_db", "levening_db", "lnight_db", "pct_time_above_who_day", "pct_time_above_who_night", "main_source"]];
+  planningRows().forEach(({ site, p, st }) => rows.push([site.id, site.name, site.setting, site.lat, site.lng, gradeOf(p.Lden)?.letter || "", p.Lden?.toFixed(1), p.Ld?.toFixed(1), p.Le?.toFixed(1), p.Ln?.toFixed(1), p.overDayPct?.toFixed(0), p.overNightPct?.toFixed(0), st.topCat || ""]));
+  const csv = rows.map(r => r.map(x => `"${String(x ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  copyText(csv, "Copied the planning report as CSV");
+});
+function copyText(text, okMsg) {
+  const fallback = () => { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); toast(okMsg); } catch (e) { toast("Copy is blocked here. Select the text manually."); } ta.remove(); };
+  try { navigator.clipboard.writeText(text).then(() => toast(okMsg), fallback); } catch (e) { fallback(); }
+}
+
+/* =====================================================================
+   START
+   ===================================================================== */
+Loop.render = () => { if (state.offset < 0) state.offset = Math.max(state.offset, -1439); if (Auth.user) renderAll(); };
+Hooks.sitesChanged = () => { NM.syncMarkers(); buildSiteOptions(); };
+Hooks.siteAdded = () => { NM.syncMarkers(); buildSiteOptions(); };
+Hooks.siteMoved = site => NM.ensureMarker(site);
+function refreshTheme() { themeCharts(); NM.setBasemap($("basemap").value); if (Auth.user) renderAll(); }
+onThemeChange(refreshTheme);
+setInterval(() => $("clock").textContent = `${fmtHMS.format(Date.now())} PHT`, 1000);
+$("clock").textContent = `${fmtHMS.format(Date.now())} PHT`;
+
+let started = false;
+async function startDashboard() {
+  await refreshManagement();
+  if (started) { renderAll(); return; }
+  started = true;
+  const savedSite = store("nma.site"); if (savedSite && SITES.some(s => s.id === savedSite)) state.selected = savedSite;
+  const savedMap = store("nma.basemap"); if (savedMap) $("basemap").value = savedMap;
+  renderModels(); themeCharts(); NM.setBasemap($("basemap").value);
+  NM.fit();
+  await switchMode(await resolveMode());
+  setInterval(refreshManagement, 30000);
+}
+Auth.init();
+</script>
+</body>
+</html>

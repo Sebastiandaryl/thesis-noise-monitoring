@@ -35,8 +35,10 @@ thesis-noise-monitoring/
     │   ├── realtime_predict_rf.py  # live mic recording -> predicted class
     │   └── publish_reading.py    # A-weighted dB level + send a reading to the dashboard
     └── dashboard/
-        ├── index.html            # GIS dashboard (single page)
-        ├── server.py             # serves the dashboard and the readings API
+        ├── index.html            # public noise map for residents
+        ├── admin.html            # staff dashboard (admins and government planners, sign-in required)
+        ├── assets/               # shared code and styles for both pages
+        ├── server.py             # serves both pages, staff accounts and the readings API
         └── README.md             # dashboard features and how to connect the prototype
 ```
 
@@ -113,7 +115,10 @@ A trained model and feature file are already committed, so you can skip to step 
 python software/dashboard/server.py
 ```
 
-Open http://localhost:8000. The dashboard runs on simulated placeholder data for 9 sites until the prototype sends real readings with `publish_reading.py`. See [software/dashboard/README.md](software/dashboard/README.md) for the features and how to connect the Raspberry Pi.
+- http://localhost:8000 is the public noise map. Residents can see how loud each area is and compare livability grades before choosing where to live.
+- http://localhost:8000/admin.html is the staff dashboard. Administrators post notices and manage sensors. Government planners (LGU, DENR, DOH) get the full analytics and a planning report.
+
+Both pages run on simulated placeholder data for 9 sites until the prototype sends real readings with `publish_reading.py`. See [software/dashboard/README.md](software/dashboard/README.md) for the features, staff accounts and how to connect the Raspberry Pi.
 
 ## Roadmap
 

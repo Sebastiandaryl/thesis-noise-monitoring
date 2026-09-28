@@ -1,30 +1,72 @@
-# GIS noise dashboard
+# Manila Noise Atlas dashboard
 
-A single-page web dashboard for the noise monitoring network. It shows a noise map of the sensor sites, measured vs predicted levels, noise source classification, chaos metrics and alerts.
+The dashboard has two views of the same sensor data:
 
-It runs on placeholder data today. When the prototype is ready, the Raspberry Pi posts its readings to a small server and the dashboard shows them live. The dashboard code itself does not need to change.
+| Page | Who it's for | Sign-in |
+|---|---|---|
+| `index.html`, the public noise map | Residents, renters, home buyers, anyone planning their day | None |
+| `admin.html`, the staff dashboard | **Administrators** (the research team) and **government planners** (LGU, DENR, DOH) | Required |
+
+Both run on placeholder data today. When the prototype is ready, the Raspberry Pi posts its readings to `server.py` and both pages show them live. The page code does not need to change.
 
 ## Run it
 
 ```bash
+# 1. Create the first administrator account (asks for a password)
+python software/dashboard/server.py --add-user admin --role admin --name "Your Name"
+
+# 2. Start the server
 python software/dashboard/server.py
 ```
 
-Open http://localhost:8000. From another device on the same network, use the Pi's address, for example `http://raspberrypi.local:8000`.
+- Public map: http://localhost:8000
+- Staff dashboard: http://localhost:8000/admin.html
 
-Opening `index.html` directly in a browser also works, but only in simulated mode.
+From another device on the same network, use the Pi's address, for example `http://raspberrypi.local:8000`.
 
-## What's on the dashboard
+If you open the HTML files directly (double-click) or in the preview, there is no server. The staff page then runs in **demo mode**: sign in as `admin` / `admin123` or `planner` / `planner123`, and changes are saved only in that browser. Demo accounts never work when the pages are served by `server.py`.
 
-- **Noise map** (Leaflet): one marker per site, colored by noise level band. You can switch between measured and predicted (+15 min) values and turn on a heatmap layer and high-risk zone rings (sites whose 1-hour LAeq is 70 dB or more). Basemaps are OpenStreetMap, CARTO light/dark and Esri satellite, plus an offline schematic of the Taft/Malate area.
-- **24-hour replay**: scrub or play back the map over the last day.
-- **Filters**: by dominant noise source (vehicular, industrial, human activity, commercial, ambient), by minimum level, or only sites above the WHO limit.
-- **Summary strip**: network LAeq, loudest site, sites above the WHO limit (55 dB day, 40 dB night), active alerts, forecast error (MAE) and nodes online.
-- **Site panel**: measured and predicted level, LAeq/Lmax/L10/L90 for the last hour, classifier probabilities, and chaos metrics (Lyapunov λ, correlation dimension D₂, fractal dimension Df).
-- **Charts**: measured vs predicted (1 h / 6 h / 24 h), hourly profile against the WHO limits, noise source mix per site, and a phase-space portrait (delay embedding) of the selected site.
-- **Sensor table** (sortable), **alerts feed** (warning at 70 dB, critical at 85 dB, forecast exceedance, node offline), **classifier comparison** table, and **Copy CSV**.
+## Public noise map (`index.html`)
 
-Light and dark themes follow the system setting. The layout works on phones.
+Plain language, no jargon. Everything a resident needs to decide whether an area suits them:
+
+- **Notices** from the administrators at the top, for example "Pandacan sensor under maintenance".
+- **Area picker and map**. You can color the map by **noise right now** or by **livability grade**. Sensors under maintenance are greyed out.
+- **Area card**:
+  - **Right now**: the level with an everyday comparison ("like heavy city traffic") and whether it's within the WHO guideline.
+  - **Next 15 minutes**: getting louder or quieter.
+  - **Living here**: a grade from A (quiet) to E (very noisy) with advice, plus day and night averages checked against the WHO guideline (55 dB day, 40 dB night).
+  - **Facts**: the main source of noise in plain words (traffic, people, industry…), loudest and quietest hours, and the loudest moment in the past hour.
+- **A typical day**: 24 hourly blocks colored by loudness, so people can see when an area is calm.
+- **Compare areas**: every area ranked quietest to loudest (or the reverse), with grade, day and night averages and main source. Click one to open it.
+- **What the numbers mean** (a dB scale with everyday examples) and **About this map** (how the data and grades work, a link for government staff).
+
+The grade uses **Lden**, the day-evening-night level from the EU Environmental Noise Directive, over the last 24 hours. Evening readings (19:00–23:00) get a 5 dB penalty and night readings (23:00–07:00) a 10 dB penalty. A is under 55 dB, B 55–60, C 60–65, D 65–70, E 70 dB and above.
+
+## Staff dashboard (`admin.html`)
+
+Everything from the original dashboard: the noise map (heatmap, high-risk zones, measured/predicted, 24-hour replay), filters, summary strip, site panel with classifier probabilities and chaos metrics (λ, D₂, Df), measured vs predicted chart, phase-space portrait, 24-hour profile, source mix, sensor table, alerts and classifier comparison. It adds:
+
+| Section | Administrator | Government planner |
+|---|---|---|
+| **Planning report**: grade, Lden, day/evening/night levels, % of time above the WHO day and night limits, main source per site. Copy as CSV. | ✓ | ✓ |
+| **Sensor sites**: set a site to Active, Maintenance or Offline, add a note, fix names and coordinates, add or remove sites | edit | view |
+| **Public notices**: post information, maintenance, noise warning or system problem notices, optionally for one area, with an expiry | post and remove | view |
+| **Activity log**: sign-ins, failed sign-ins, notices, site changes and rejected readings | ✓ | ✓ |
+| **Data source** settings | ✓ | — |
+
+## Staff accounts
+
+Accounts live in `data/live/users.json` (ignored by git). Passwords are stored as salted PBKDF2 hashes.
+
+```bash
+python software/dashboard/server.py --add-user admin --role admin --name "Daryl Sebastian"
+python software/dashboard/server.py --add-user denr --role planner --name "DENR NCR"
+python software/dashboard/server.py --list-users
+python software/dashboard/server.py --remove-user denr
+```
+
+Sessions last 12 hours and use an HttpOnly, SameSite=Strict cookie. After 5 failed sign-ins from one address, that address must wait 10 minutes.
 
 ## Connect the prototype
 
@@ -49,7 +91,13 @@ Light and dark themes follow the system setting. The layout works on phones.
 
    `compute_laeq` applies A-weighting and assumes the INMP441 sensitivity (−26 dBFS at 94 dB SPL). After checking against a reference sound level meter, adjust `CALIBRATION_OFFSET_DB` in `publish_reading.py`.
 
-3. In the dashboard, open **Data source**, choose **Prototype API (live)** and click **Apply**. To make live mode the default, set `DATA_MODE: "api"` in `CONFIG` near the top of the script in `index.html`.
+3. That's it. With `DATA_MODE: "auto"` (the default in `CONFIG` in `assets/core.js`), both pages switch to live data as soon as the server has readings from the last 10 minutes.
+
+To stop other devices on the network from posting fake readings, set the same secret on the server and on each Pi:
+
+```bash
+export NMA_DEVICE_KEY="some-long-random-text"
+```
 
 To send a test reading without the microphone:
 
@@ -77,14 +125,27 @@ python software/processing/publish_reading.py --site S03 --db 81.2 --category co
 
 `predicted_db` is the forecast for 15 minutes after `timestamp`. If your model uses a different horizon, change `FORECAST_HORIZON_MIN` in `CONFIG`. Category names match the classes in `extract_features.py`.
 
-Readings are stored in `data/live/readings.jsonl` (ignored by git), so the charts keep their history after a restart.
+Everything the server stores is in `data/live/` (readings, accounts, notices, site changes, activity log) and is ignored by git.
+
+## Files
+
+```
+software/dashboard/
+├── index.html        public noise map
+├── admin.html        staff dashboard
+├── assets/
+│   ├── core.js       settings, sites, simulator, data adapter, sign-in, grades, shared map
+│   ├── core.css      colors, type and shared components (light and dark)
+│   └── leaflet.css   map library styles
+└── server.py         pages, staff accounts and API (Python standard library only)
+```
 
 ## Things to replace before the defense
 
 | What | Where |
 |---|---|
-| Real site coordinates and names | `SITES` in `index.html` (or send `lat`, `lng`, `name` with each reading) |
-| Classifier results | `MODEL_RESULTS` in `index.html` |
-| Alert thresholds, WHO limits, day/night hours | `CONFIG` in `index.html` |
+| Real site coordinates and names | `DEFAULT_SITES` in `assets/core.js`, or edit them in the staff dashboard |
+| Classifier results | `MODEL_RESULTS` in `assets/core.js` |
+| Alert thresholds, WHO limits, day/night hours | `CONFIG` in `assets/core.js` |
 
-Site IDs in `SITES` must match the `site_id` each Pi sends.
+Site IDs must match the `site_id` each Pi sends.
