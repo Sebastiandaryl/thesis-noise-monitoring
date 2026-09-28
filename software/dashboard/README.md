@@ -31,14 +31,16 @@ If you open the HTML files directly (double-click) or in the preview, there is n
 Plain language, no jargon. Everything a resident needs to decide whether an area suits them:
 
 - **Notices** from the administrators at the top, for example "Pandacan sensor under maintenance".
-- **Area picker and map**. You can color the map by **noise right now** or by **livability grade**. Sensors under maintenance are greyed out.
+- **Area picker and map**. You can color the map by **noise right now**, the **forecast for the next 15 minutes** (dashed pins), or **livability grade**. Sensors under maintenance are greyed out.
 - **Area card**:
   - **Right now**: the level with an everyday comparison ("like heavy city traffic") and whether it's within the WHO guideline.
-  - **Next 15 minutes**: getting louder or quieter.
+  - **Predicted in 15 min**: the forecast level and whether it's getting louder or quieter.
+  - **Forecast accuracy**: the average difference between predicted and actual over the last 24 hours, and the share of forecasts within 3 dB.
   - **Living here**: a grade from A (quiet) to E (very noisy) with advice, plus day and night averages checked against the WHO guideline (55 dB day, 40 dB night).
   - **Facts**: the main source of noise in plain words (traffic, people, industry…), loudest and quietest hours, and the loudest moment in the past hour.
+- **Predicted vs actual**: a chart of the measured level against the AI forecast (3 h, 12 h or 24 h, plus the next 15 minutes), a predicted-vs-actual scatter plot, and plain-language accuracy figures: average difference (MAE), % within 3 dB, whether it tends to predict too high or too low (bias), and the latest check.
 - **A typical day**: 24 hourly blocks colored by loudness, so people can see when an area is calm.
-- **Compare areas**: every area ranked quietest to loudest (or the reverse), with grade, day and night averages and main source. Click one to open it.
+- **Compare areas**: every area ranked quietest to loudest (or the reverse), with grade, level now and in 15 minutes, day and night averages, forecast accuracy and main source. Click one to open it.
 - **What the numbers mean** (a dB scale with everyday examples) and **About this map** (how the data and grades work, a link for government staff).
 
 The grade uses **Lden**, the day-evening-night level from the EU Environmental Noise Directive, over the last 24 hours. Evening readings (19:00–23:00) get a 5 dB penalty and night readings (23:00–07:00) a 10 dB penalty. A is under 55 dB, B 55–60, C 60–65, D 65–70, E 70 dB and above.

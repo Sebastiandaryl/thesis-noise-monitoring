@@ -66,14 +66,14 @@
 .day-periods { display: grid; grid-template-columns: 6fr 16fr 2fr; gap: 3px; font-size: 11px; color: var(--muted); }
 .day-periods span { border-top: 2px solid var(--line); padding-top: 3px; }
 .compare { display: grid; }
-.cmp-row { display: grid; grid-template-columns: 28px minmax(0, 1.6fr) 118px repeat(2, minmax(0, .8fr)) minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 6px; border-top: 1px solid var(--line); cursor: pointer; border-radius: 8px; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; width: 100%; }
+.cmp-row { display: grid; grid-template-columns: 28px minmax(0, 1.6fr) 118px minmax(0, 1fr) repeat(2, minmax(0, .7fr)) minmax(0, .8fr) minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 6px; border-top: 1px solid var(--line); cursor: pointer; border-radius: 8px; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; width: 100%; }
 .cmp-row:first-child { border-top: 0; }
 .cmp-row:hover, .cmp-row.sel { background: var(--accent-soft); }
 .cmp-row .rank { font: 600 12px var(--font-mono); color: var(--muted); text-align: right; }
 .cmp-row .nm b { display: block; font-weight: 600; }
 .cmp-row .nm span, .cmp-row .sm { font-size: 12px; color: var(--muted); }
 .cmp-row .val { font: 600 14px var(--font-mono); font-variant-numeric: tabular-nums; }
-.cmp-head { display: grid; grid-template-columns: 28px minmax(0, 1.6fr) 118px repeat(2, minmax(0, .8fr)) minmax(0, 1fr); gap: 12px; padding: 0 6px 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.cmp-head { display: grid; grid-template-columns: 28px minmax(0, 1.6fr) 118px minmax(0, 1fr) repeat(2, minmax(0, .7fr)) minmax(0, .8fr) minmax(0, 1fr); gap: 12px; padding: 0 6px 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 .scale { display: grid; gap: 0; }
 .scale-row { display: grid; grid-template-columns: 64px 12px 1fr; gap: 12px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .scale-row:first-child { border-top: 0; }
@@ -83,8 +83,23 @@
 .prose p { margin: 0; color: var(--ink-2); max-width: 70ch; }
 .prose { display: grid; gap: 10px; }
 .pin.grade span { font-family: var(--font-display); font-size: 15px; }
+.fc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fc { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 3px; align-content: start; }
+.fc .eyebrow { font-size: 10.5px; }
+.fc b { font: 700 26px/1 var(--font-display); font-stretch: 87%; font-variant-numeric: tabular-nums; }
+.fc b small { font: 500 13px var(--font-body); color: var(--muted); margin-left: 3px; }
+.fc.pred { border-style: dashed; border-color: var(--predicted); }
+.fc.pred b { color: var(--predicted); }
+.pv-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 20px; align-items: start; }
+.pv-grid > div { display: grid; gap: 10px; min-width: 0; }
+.pv-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pv-stats .fact b { font: 700 22px/1.1 var(--font-display); font-stretch: 87%; font-variant-numeric: tabular-nums; }
+.pv-stats .fact span.sub { line-height: 1.35; }
+.chart-box.sq { height: 240px; }
+.cmp-row .arrow { color: var(--muted); font-weight: 400; }
+.cmp-row .pv { color: var(--predicted); }
 @media (max-width: 980px) {
-  .main-grid, .two { grid-template-columns: minmax(0, 1fr); }
+  .main-grid, .two, .pv-grid { grid-template-columns: minmax(0, 1fr); }
   #map { height: 440px; }
 }
 @media (max-width: 640px) {
@@ -92,6 +107,7 @@
   .cmp-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
   .cmp-row .hide-sm { display: none; }
   .now-val { font-size: 46px; }
+  .pv-stats .fact b { font-size: 19px; }
   #map { height: 360px; }
   .day-strip .cell { height: 34px; }
   .day-hours span:nth-child(4n+3) { visibility: hidden; }
@@ -127,8 +143,9 @@
       <label for="areaSelect">Choose an area</label>
       <select id="areaSelect"></select>
     </div>
-    <div class="seg" role="group" aria-label="Map colors" style="width:260px">
+    <div class="seg" role="group" aria-label="Map colors" style="width:min(100%,400px)">
       <button type="button" id="mapNow" aria-pressed="true">Noise right now</button>
+      <button type="button" id="mapPred" aria-pressed="false">Forecast, 15 min</button>
       <button type="button" id="mapGrade" aria-pressed="false">Livability grade</button>
     </div>
   </div>
@@ -157,7 +174,10 @@
             <span class="plain" id="aPlain"></span>
           </div>
         </div>
-        <div class="sub" id="aNext"></div>
+        <div class="fc-row">
+          <div class="fc pred"><span class="eyebrow">Predicted in 15 min</span><b id="aPred">--<small>dB</small></b><span class="sub" id="aNext"></span></div>
+          <div class="fc"><span class="eyebrow">Forecast accuracy</span><b id="aAcc">--<small>dB</small></b><span class="sub" id="aAccSub"></span></div>
+        </div>
       </div>
       <div class="area-sec">
         <div class="eyebrow">Living here</div>
@@ -181,6 +201,39 @@
     </div>
   </section>
 
+  <section class="card" id="pvCard">
+    <div class="card-head">
+      <h2>Predicted vs actual noise in <span id="pvName">this area</span></h2>
+      <span class="sub">The AI forecasts each area's noise 15 minutes ahead. See how the forecast compares with what the sensor measured.</span>
+      <div class="seg spacer" role="group" aria-label="Time range" style="width:180px">
+        <button type="button" data-pvrange="180" aria-pressed="true">3 h</button>
+        <button type="button" data-pvrange="720" aria-pressed="false">12 h</button>
+        <button type="button" data-pvrange="1440" aria-pressed="false">24 h</button>
+      </div>
+    </div>
+    <div class="card-body pv-grid">
+      <div>
+        <div class="chart-legend">
+          <span><i class="key-line" style="border-color:var(--measured)"></i>Actual (measured)</span>
+          <span><i class="key-line dash" style="border-color:var(--predicted)"></i>Predicted by the AI</span>
+          <span><i class="key-line dot" style="border-color:var(--muted)"></i>WHO guideline</span>
+        </div>
+        <div class="chart-box tall"><canvas id="pvChart" aria-label="Actual versus predicted noise level over time"></canvas></div>
+        <p class="note">The line after <b>Now</b> is the forecast for the next 15 minutes. Each forecast was made 15 minutes before the time shown, so where the two lines overlap the forecast was right.</p>
+      </div>
+      <div>
+        <div class="pv-stats">
+          <div class="fact"><span class="eyebrow">Average difference</span><b id="pvMae">--</b><span class="sub" id="pvMaeSub"></span></div>
+          <div class="fact"><span class="eyebrow">Close forecasts</span><b id="pvWithin">--</b><span class="sub">of forecasts were within 3 dB of the actual level</span></div>
+          <div class="fact"><span class="eyebrow">Tendency</span><b id="pvBias">--</b><span class="sub" id="pvBiasSub"></span></div>
+          <div class="fact"><span class="eyebrow">Latest check</span><b id="pvLast">--</b><span class="sub" id="pvLastSub"></span></div>
+        </div>
+        <div class="chart-box sq"><canvas id="pvScatter" aria-label="Predicted against actual noise level"></canvas></div>
+        <p class="note">Each dot is one 5-minute period: actual level across, predicted level up. Dots on the diagonal line mean the forecast was exactly right.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="card">
     <div class="card-head"><h2>A typical day in <span id="dayName">this area</span></h2><span class="sub">Average level for each hour, last 24 hours</span></div>
     <div class="card-body" style="display:grid;gap:6px">
@@ -200,7 +253,7 @@
       </div>
     </div>
     <div class="card-body">
-      <div class="cmp-head"><span></span><span>Area</span><span>Grade</span><span>Daytime</span><span>Night</span><span>Main source</span></div>
+      <div class="cmp-head"><span></span><span>Area</span><span>Grade</span><span>Now → in 15 min</span><span>Daytime</span><span>Night</span><span>Forecast accuracy</span><span>Main source</span></div>
       <div class="compare" id="compare"></div>
     </div>
   </section>
@@ -215,6 +268,7 @@
       <div class="card-body prose">
         <p><b>Where the numbers come from.</b> Each area has a Raspberry Pi with a calibrated microphone. It measures the A-weighted sound level (dB) and uses AI to recognize the main source of noise, such as traffic, people or machinery. No audio recordings are published.</p>
         <p><b>Livability grade.</b> Grades use the day-evening-night level (Lden) of the last 24 hours, which counts evening noise a bit more and night noise even more, because noise hurts most when people rest. A is under 55 dB, B 55–60, C 60–65, D 65–70 and E 70 dB or more.</p>
+        <p><b>Noise forecast.</b> A model trained on each sensor's past readings predicts the level 15 minutes ahead. The forecast accuracy is the average difference between what was predicted and what was measured over the last 24 hours, so a value of ±2 dB means the forecast was usually within 2 dB.</p>
         <p><b>Health guidance.</b> The WHO recommends keeping outdoor noise below 55 dB during the day and 40 dB at night. Long-term exposure above these levels is linked to poor sleep, stress and heart problems.</p>
         <p id="aboutData"></p>
         <p><b>For local governments and agencies.</b> LGU, DENR and DOH staff can <a href="admin.html">sign in</a> for the full dashboard, forecasts and a planning report.</p>
@@ -231,10 +285,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
 <script src="assets/core.js"></script>
 <script>
 "use strict";
-const pub = { mapMode: "now", sort: "quiet", notices: [] };
+const pub = { mapMode: "now", sort: "quiet", notices: [], pvRange: 180 };
 const NM = createNoiseMap("map", { onSelect: id => selectArea(id, false), noticeEl: $("mapNotice") });
 const map = NM.map;
 NM.markerLayer.addTo(map);
@@ -250,6 +305,17 @@ NOTICE_ICON.error = NOTICE_ICON.warning;
 
 const siteName = id => SITES.find(s => s.id === id)?.name || id;
 const currentLevel = site => site.status !== "active" ? null : (state.latest[site.id] && Date.now() - state.latest[site.id].ts < 5 * MIN ? state.latest[site.id].db : valueAt(site.id, liveMinute()));
+const predLevel = site => site.status !== "active" ? null : valueAt(site.id, liveMinute() + CONFIG.FORECAST_HORIZON_MIN, "pred");
+// Compare each forecast with what was measured at the time it was made for (the bucket holds both).
+function forecastAccuracy(siteId, len = HISTORY_MIN) {
+  const h = state.history[siteId] || {}; const nowM = liveMinute();
+  let n = 0, abs = 0, bias = 0, within = 0;
+  for (let m = nowM - len + 1; m <= nowM; m++) {
+    const b = h[m]; if (b?.db == null || b.pred == null) continue;
+    const e = b.pred - b.db; n++; abs += Math.abs(e); bias += e; if (Math.abs(e) <= 3) within++;
+  }
+  return n ? { n, mae: abs / n, bias: bias / n, within: within / n } : null;
+}
 const bandChipPub = v => { if (v == null) return ""; const b = bandOf(v); return `<span class="band" style="background:${b.color};color:${b.text}">${b.label}</span>`; };
 
 function buildAreaOptions() {
@@ -275,22 +341,26 @@ function renderMapPub(periods) {
     const mk = NM.ensureMarker(site); NM.markerLayer.addLayer(mk);
     const v = currentLevel(site); const p = periods[site.id]; const g = gradeOf(p.Lden);
     const muted = site.status !== "active";
-    if (pub.mapMode === "now") {
-      NM.paintPin(site, v, { selected: site.id === state.selected, alarm: v != null && v >= CONFIG.ALERT_DB, muted });
-      if (v != null) heat.push([site.lat, site.lng, clamp((v - 40) / 50, 0.05, 1)]);
+    const f = predLevel(site);
+    if (pub.mapMode !== "grade") {
+      const val = pub.mapMode === "pred" ? f : v;
+      NM.paintPin(site, val, { selected: site.id === state.selected, alarm: val != null && val >= CONFIG.ALERT_DB, muted, pred: pub.mapMode === "pred" });
+      if (val != null) heat.push([site.lat, site.lng, clamp((val - 40) / 50, 0.05, 1)]);
     } else {
       NM.paintPin(site, p.Lden, { selected: site.id === state.selected });
+      mk.getElement()?.querySelector(".pin")?.classList.remove("pred");
       const pin = mk.getElement()?.querySelector(".pin");
       if (pin && g) { pin.style.background = g.color; pin.style.color = g.text; pin.querySelector("span").textContent = g.letter; pin.classList.add("grade"); pin.style.setProperty("--s", "34px"); }
     }
-    if (pub.mapMode === "now") mk.getElement()?.querySelector(".pin")?.classList.remove("grade");
+    if (pub.mapMode !== "grade") mk.getElement()?.querySelector(".pin")?.classList.remove("grade");
     mk.setTooltipContent(`<div class="tip-name">${esc(site.name)}</div>
-      ${muted ? `<div class="tip-row"><span>Sensor under ${site.status === "maintenance" ? "maintenance" : "repair"}</span></div>` : `<div class="tip-row"><span>Right now</span><b class="mono">${round1(v)} dB</b></div>`}
+      ${muted ? `<div class="tip-row"><span>Sensor under ${site.status === "maintenance" ? "maintenance" : "repair"}</span></div>` : `<div class="tip-row"><span>Right now</span><b class="mono">${round1(v)} dB</b></div>
+         <div class="tip-row"><span>Predicted in 15 min</span><b class="mono">${round1(f)} dB</b></div>`}
       <div class="tip-row"><span>Livability</span><b>${g ? `${g.letter} · ${g.label}` : "—"}</b></div>`);
   });
   NM.heatLayer.setLatLngs(heat);
-  $("mapLegend").innerHTML = pub.mapMode === "now"
-    ? BANDS.map(b => `<span><i style="background:${b.color}"></i>${b.label}</span>`).join("")
+  $("mapLegend").innerHTML = pub.mapMode !== "grade"
+    ? BANDS.map(b => `<span><i style="background:${b.color}"></i>${b.label}</span>`).join("") + (pub.mapMode === "pred" ? `<span>Dashed outline: forecast ${CONFIG.FORECAST_HORIZON_MIN} min ahead</span>` : "")
     : GRADES.map(g => `<span><i style="background:${g.color}"></i>${g.letter} ${g.label}</span>`).join("");
 }
 
@@ -306,11 +376,15 @@ function renderArea(periods) {
   $("aNow").innerHTML = `${v != null ? Math.round(v) : "--"}<small>dB</small>`;
   $("aBand").innerHTML = v != null ? bandChipPub(v) : `<span class="sub">No live reading</span>`;
   $("aPlain").textContent = v != null ? `Right now it's ${dbComparison(v)}. ${v > lim ? `That's above the WHO ${isDay(nowMs) ? "daytime" : "night"} guideline of ${lim} dB.` : `That's within the WHO guideline of ${lim} dB.`}` : "";
-  const pred = maint ? null : valueAt(site.id, liveMinute() + CONFIG.FORECAST_HORIZON_MIN, "pred");
+  const pred = predLevel(site);
+  $("aPred").innerHTML = `${pred != null ? Math.round(pred) : "--"}<small>dB</small>`;
   if (pred != null && v != null) {
     const d = pred - v;
-    $("aNext").textContent = Math.abs(d) < 1.5 ? `Next 15 minutes: staying about the same (${Math.round(pred)} dB).` : `Next 15 minutes: expected to get ${d > 0 ? "louder" : "quieter"}, around ${Math.round(pred)} dB.`;
-  } else $("aNext").textContent = "";
+    $("aNext").textContent = Math.abs(d) < 1.5 ? "About the same as now" : `Getting ${d > 0 ? "louder" : "quieter"} (${d > 0 ? "+" : "−"}${Math.abs(d).toFixed(0)} dB)`;
+  } else $("aNext").textContent = maint ? "Paused while the sensor is down" : "No forecast yet";
+  const acc = forecastAccuracy(site.id);
+  $("aAcc").innerHTML = acc ? `±${acc.mae.toFixed(1)}<small>dB</small>` : `--<small>dB</small>`;
+  $("aAccSub").textContent = acc ? `Average miss over the last 24 h, ${Math.round(100 * acc.within)}% within 3 dB` : "Appears once forecasts can be checked";
 
   $("gLetter").textContent = g ? g.letter : "–";
   $("gLetter").style.background = g ? g.color : "var(--surface-2)"; $("gLetter").style.color = g ? g.text : "var(--muted)";
@@ -353,14 +427,122 @@ function renderCompare(periods) {
   $("compare").innerHTML = rows.map((r, i) => {
     const g = gradeOf(r.p.Lden);
     const c = siteStats(r.s).topCat;
+    const v = currentLevel(r.s), f = predLevel(r.s), a = forecastAccuracy(r.s.id);
     return `<button type="button" class="cmp-row ${r.s.id === state.selected ? "sel" : ""}" data-id="${r.s.id}">
       <span class="rank">${i + 1}</span>
       <span class="nm"><b>${esc(r.s.name)}</b><span>${esc(r.s.setting)}${r.s.status !== "active" ? " · sensor paused" : ""}</span></span>
       <span><span class="band" style="background:${g.color};color:${g.text}">${g.letter} · ${g.label}</span></span>
+      <span class="val hide-sm">${v != null ? `${Math.round(v)} <span class="arrow">→</span> <span class="pv">${f != null ? Math.round(f) : "--"}</span> <span class="sm">dB</span>` : `<span class="sm">paused</span>`}</span>
       <span class="val hide-sm">${round1(r.p.whoDay)} <span class="sm">dB</span></span>
       <span class="val hide-sm">${round1(r.p.whoNight)} <span class="sm">dB</span></span>
+      <span class="val hide-sm">${a ? `±${a.mae.toFixed(1)} <span class="sm">dB</span>` : "—"}</span>
       <span class="sm hide-sm">${c ? esc(SOURCE_WORDS[c] || c) : "—"}</span></button>`;
   }).join("") || `<p class="note">Rankings appear after a day of readings.</p>`;
+}
+
+/* Predicted vs actual charts */
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.font.size = 11;
+Chart.defaults.animation = false;
+Chart.defaults.plugins.colors = { enabled: false };
+Chart.defaults.maintainAspectRatio = false;
+const nowLine = {
+  id: "nowLine",
+  afterDatasetsDraw(chart, _a, opts) {
+    if (opts.index == null) return;
+    const x = chart.scales.x.getPixelForValue(opts.index); const { top, bottom } = chart.chartArea;
+    const ctx = chart.ctx; ctx.save();
+    ctx.strokeStyle = cssVar("--muted"); ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = cssVar("--ink-2"); ctx.font = `600 10px ${Chart.defaults.font.family}`;
+    ctx.fillText("Now", x + 4, top + 10); ctx.restore();
+  },
+};
+const dbLabel = c => ` ${c.dataset.label}: ${c.parsed.y == null ? "—" : c.parsed.y.toFixed(1)} dB`;
+const pvChart = new Chart($("pvChart"), {
+  type: "line",
+  data: { labels: [], datasets: [
+    { label: "Actual", data: [], borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.15, spanGaps: false },
+    { label: "Predicted", data: [], borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0.2 },
+    { label: "WHO guideline", data: [], borderWidth: 1, borderDash: [2, 3], pointRadius: 0, stepped: true },
+  ] },
+  options: {
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { display: false }, nowLine: {}, tooltip: { callbacks: { label: dbLabel } } },
+    scales: { x: { ticks: { maxTicksLimit: 8, autoSkip: true, maxRotation: 0 } }, y: { suggestedMin: 40, suggestedMax: 90, title: { display: true, text: "dB" } } },
+  },
+  plugins: [nowLine],
+});
+const pvScatter = new Chart($("pvScatter"), {
+  type: "scatter",
+  data: { datasets: [
+    { label: "Perfect forecast", data: [], showLine: true, borderWidth: 1, borderDash: [4, 4], pointRadius: 0, pointHoverRadius: 0 },
+    { label: "5-minute period", data: [], pointRadius: 3, pointHoverRadius: 5 },
+  ] },
+  options: {
+    plugins: { legend: { display: false }, tooltip: { filter: i => i.datasetIndex === 1, callbacks: { label: c => ` ${c.raw.t}: actual ${c.parsed.x.toFixed(1)} dB, predicted ${c.parsed.y.toFixed(1)} dB` } } },
+    scales: { x: { title: { display: true, text: "Actual, dB" } }, y: { title: { display: true, text: "Predicted, dB" } } },
+  },
+});
+function themeCharts() {
+  const grid = cssVar("--line"), tick = cssVar("--muted");
+  const tt = { backgroundColor: cssVar("--surface"), titleColor: cssVar("--ink"), bodyColor: cssVar("--ink-2"), borderColor: cssVar("--line"), borderWidth: 1, padding: 9, cornerRadius: 8, boxPadding: 4, usePointStyle: true };
+  [pvChart, pvScatter].forEach(ch => {
+    Object.values(ch.options.scales).forEach(s => { Object.assign(s.grid ??= {}, { color: grid, drawTicks: false }); Object.assign(s.border ??= {}, { display: false }); Object.assign(s.ticks ??= {}, { color: tick, padding: 6 }); if (s.title) s.title.color = tick; });
+    Object.assign(ch.options.plugins.tooltip, tt);
+  });
+  const d = pvChart.data.datasets;
+  d[0].borderColor = d[0].backgroundColor = cssVar("--measured");
+  d[1].borderColor = d[1].backgroundColor = cssVar("--predicted");
+  d[2].borderColor = cssVar("--muted");
+  pvScatter.data.datasets[0].borderColor = cssVar("--muted");
+  pvScatter.data.datasets[1].backgroundColor = cssVar("--predicted") + "b3"; pvScatter.data.datasets[1].borderColor = "transparent";
+  [pvChart, pvScatter].forEach(ch => ch.update());
+}
+
+function renderForecast() {
+  const site = SITES.find(s => s.id === state.selected); if (!site) return;
+  const h = state.history[site.id] || {}; const nowM = liveMinute();
+  const range = pub.pvRange; const step = range > 360 ? 5 : range > 60 ? 2 : 1;
+  const labels = [], meas = [], pred = [], who = []; let nowIdx = null;
+  for (let m = nowM - range + 1; m <= nowM + CONFIG.FORECAST_HORIZON_MIN; m += step) {
+    const vals = [], preds = [];
+    for (let k = 0; k < step; k++) { const b = h[m + k]; if (b?.db != null && m + k <= nowM) vals.push(b.db); if (b?.pred != null) preds.push(b.pred); }
+    if (m <= nowM && m + step > nowM) nowIdx = labels.length;
+    labels.push(fmtHM.format(m * MIN)); meas.push(m <= nowM ? leq(vals) : null); pred.push(preds.length ? leq(preds) : null);
+    who.push(limitAt(m * MIN));
+  }
+  pvChart.data.labels = labels;
+  [meas, pred, who].forEach((d, i) => pvChart.data.datasets[i].data = d);
+  pvChart.options.plugins.nowLine.index = nowIdx;
+  pvChart.update("none");
+
+  // Scatter of 5-minute averages where both values exist
+  const pts = [];
+  for (let m = nowM - range + 1; m + 4 <= nowM; m += 5) {
+    const a = [], p = [];
+    for (let k = 0; k < 5; k++) { const b = h[m + k]; if (b?.db != null && b.pred != null) { a.push(b.db); p.push(b.pred); } }
+    if (a.length) pts.push({ x: leq(a), y: leq(p), t: fmtHM.format(m * MIN) });
+  }
+  const all = pts.flatMap(q => [q.x, q.y]);
+  const lo = all.length ? Math.floor(Math.min(...all) / 5) * 5 : 40, hi = all.length ? Math.ceil(Math.max(...all) / 5) * 5 : 90;
+  pvScatter.data.datasets[0].data = [{ x: lo, y: lo }, { x: hi, y: hi }];
+  pvScatter.data.datasets[1].data = pts;
+  Object.assign(pvScatter.options.scales.x, { min: lo, max: hi }); Object.assign(pvScatter.options.scales.y, { min: lo, max: hi });
+  pvScatter.update("none");
+
+  const span = range >= 1440 ? "24 hours" : `${range / 60} hours`;
+  const acc = forecastAccuracy(site.id, range);
+  $("pvName").textContent = site.short || site.name;
+  $("pvMae").textContent = acc ? `±${acc.mae.toFixed(1)} dB` : "--";
+  $("pvMaeSub").textContent = acc ? `between predicted and actual over the last ${span} (${acc.n} forecasts checked)` : "Appears once forecasts can be checked";
+  $("pvWithin").textContent = acc ? `${Math.round(100 * acc.within)}%` : "--";
+  $("pvBias").textContent = !acc ? "--" : Math.abs(acc.bias) < 0.5 ? "Balanced" : acc.bias > 0 ? "Slightly high" : "Slightly low";
+  $("pvBiasSub").textContent = !acc ? "" : Math.abs(acc.bias) < 0.5 ? "The forecast is not consistently too high or too low" : `On average the forecast is ${Math.abs(acc.bias).toFixed(1)} dB ${acc.bias > 0 ? "above" : "below"} the actual level`;
+  let last = null;
+  for (let m = nowM; m > nowM - 30; m--) { const b = h[m]; if (b?.db != null && b.pred != null) { last = { m, b }; break; } }
+  $("pvLast").textContent = last ? `${Math.round(last.b.pred)} vs ${Math.round(last.b.db)} dB` : "--";
+  $("pvLastSub").textContent = last ? `Predicted vs actual at ${fmtHM.format(last.m * MIN)}, off by ${Math.abs(last.b.pred - last.b.db).toFixed(1)} dB` : "";
 }
 
 function renderSourcePub() {
@@ -376,7 +558,7 @@ function renderSourcePub() {
 
 function render() {
   const periods = Object.fromEntries(SITES.map(s => [s.id, periodLevels(s.id)]));
-  renderMapPub(periods); renderArea(periods); renderCompare(periods); renderSourcePub();
+  renderMapPub(periods); renderArea(periods); renderForecast(); renderCompare(periods); renderSourcePub();
   $("areaSelect").value = state.selected;
 }
 
@@ -392,8 +574,14 @@ $("scale").innerHTML = [
 
 $("areaSelect").addEventListener("change", e => selectArea(e.target.value));
 $("compare").addEventListener("click", e => { const b = e.target.closest("[data-id]"); if (b) { selectArea(b.dataset.id); $("area").scrollIntoView({ behavior: "smooth", block: "nearest" }); } });
-function setMapMode(m) { pub.mapMode = m; $("mapNow").setAttribute("aria-pressed", m === "now"); $("mapGrade").setAttribute("aria-pressed", m === "grade"); render(); }
+function setMapMode(m) { pub.mapMode = m; $("mapNow").setAttribute("aria-pressed", m === "now"); $("mapPred").setAttribute("aria-pressed", m === "pred"); $("mapGrade").setAttribute("aria-pressed", m === "grade"); render(); }
 $("mapNow").addEventListener("click", () => setMapMode("now"));
+$("mapPred").addEventListener("click", () => setMapMode("pred"));
+document.querySelectorAll("[data-pvrange]").forEach(b => b.addEventListener("click", () => {
+  pub.pvRange = +b.dataset.pvrange;
+  document.querySelectorAll("[data-pvrange]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  renderForecast();
+}));
 $("mapGrade").addEventListener("click", () => setMapMode("grade"));
 function setSort(s) { pub.sort = s; $("sortQuiet").setAttribute("aria-pressed", s === "quiet"); $("sortLoud").setAttribute("aria-pressed", s === "loud"); render(); }
 $("sortQuiet").addEventListener("click", () => setSort("quiet"));
@@ -404,7 +592,8 @@ Loop.render = render;
 Hooks.sitesChanged = () => { NM.syncMarkers(); buildAreaOptions(); };
 Hooks.siteAdded = Hooks.sitesChanged;
 Hooks.siteMoved = site => NM.ensureMarker(site);
-onThemeChange(() => { NM.setBasemap("auto"); render(); });
+onThemeChange(() => { themeCharts(); NM.setBasemap("auto"); render(); });
+themeCharts();
 setInterval(() => $("clock").textContent = `${fmtHM.format(Date.now())} PHT`, 10000);
 $("clock").textContent = `${fmtHM.format(Date.now())} PHT`;
 
