@@ -29,10 +29,15 @@ thesis-noise-monitoring/
 │       ├── features.csv          # extracted features (1,873 clips, 74 features each)
 │       └── rf_model.joblib       # trained Random Forest model
 └── software/
-    └── processing/
-        ├── extract_features.py   # audio dataset -> features.csv
-        ├── train_rf.py           # features.csv -> rf_model.joblib
-        └── realtime_predict_rf.py  # live mic recording -> predicted class
+    ├── processing/
+    │   ├── extract_features.py   # audio dataset -> features.csv
+    │   ├── train_rf.py           # features.csv -> rf_model.joblib
+    │   ├── realtime_predict_rf.py  # live mic recording -> predicted class
+    │   └── publish_reading.py    # A-weighted dB level + send a reading to the dashboard
+    └── dashboard/
+        ├── index.html            # GIS dashboard (single page)
+        ├── server.py             # serves the dashboard and the readings API
+        └── README.md             # dashboard features and how to connect the prototype
 ```
 
 The raw audio dataset (`data/dataset/`) is not stored in the repository because of its size. It is kept on the team's Google Drive.
@@ -102,6 +107,14 @@ python software/processing/realtime_predict_rf.py
 
 A trained model and feature file are already committed, so you can skip to step 3 without the dataset.
 
+## GIS dashboard
+
+```bash
+python software/dashboard/server.py
+```
+
+Open http://localhost:8000. The dashboard runs on simulated placeholder data for 9 sites until the prototype sends real readings with `publish_reading.py`. See [software/dashboard/README.md](software/dashboard/README.md) for the features and how to connect the Raspberry Pi.
+
 ## Roadmap
 
 These parts of the thesis are planned but not yet in this repository:
@@ -110,4 +123,4 @@ These parts of the thesis are planned but not yet in this repository:
 - Chaos-based analysis using the Largest Lyapunov Exponent, correlation dimension (D2), and fractal dimension
 - A-weighted decibel measurement checked against WHO limits (55 dB day, 40 dB night)
 - Deployment across 9 sensor sites
-- A GIS dashboard with a real-time, color-coded noise map, historical trends, and high-risk zone alerts
+- Connecting the GIS dashboard to live readings from the deployed nodes (the dashboard itself is in `software/dashboard/`)
