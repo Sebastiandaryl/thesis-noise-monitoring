@@ -22,6 +22,7 @@ Run this file directly to send one test reading:
 
 import argparse
 import json
+import os
 import urllib.request
 from datetime import datetime
 
@@ -32,6 +33,9 @@ import numpy as np
 # =========================
 
 DASHBOARD_URL = "http://localhost:8000/api/readings"
+
+# Must match NMA_DEVICE_KEY on the server when the server sets one.
+DEVICE_KEY = os.environ.get("NMA_DEVICE_KEY", "")
 
 # INMP441: -26 dBFS at 94 dB SPL, so dB SPL = dBFS + 120.
 # Adjust after calibrating against a reference sound level meter.
@@ -88,7 +92,10 @@ def send_reading(site_id, laeq_db, predicted_db=None, category=None, probabiliti
         "fractal_dim": fractal_dim,
     }
     data = json.dumps(reading).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    headers = {"Content-Type": "application/json"}
+    if DEVICE_KEY:
+        headers["X-Device-Key"] = DEVICE_KEY
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
             return 200 <= res.status < 300
