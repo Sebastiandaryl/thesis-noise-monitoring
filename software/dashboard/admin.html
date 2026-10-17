@@ -57,6 +57,7 @@
 </header>
 
 <main class="shell" style="margin-top:14px">
+  <div class="demo-bar" id="demoBar" hidden style="margin-bottom:14px"><b>Demo preview</b><span>Sample readings and simulated GPS, for presentations. Use the Presentation demo card below to show GPS loss, an offline node or a noise event.</span><a class="btn spacer" href="?demo=off">Exit demo</a></div>
 
   <section class="kpis" aria-label="Network summary">
     <div class="kpi"><span class="eyebrow">Network LAeq</span><span class="kpi-value" id="kNet">--<small>dB</small></span><span class="kpi-sub" id="kNetSub">&nbsp;</span></div>
@@ -74,12 +75,14 @@
         <div class="field">
           <label for="basemap">Basemap</label>
           <select id="basemap">
-            <option value="auto">Auto (matches theme)</option>
-            <option value="osm">Streets · OpenStreetMap</option>
-            <option value="light">Light · CARTO</option>
+            <option value="auto">Map (Google-style, matches theme)</option>
+            <option value="streets">Map · always light</option>
+            <option value="hybrid">Satellite with street names</option>
+            <option value="sat">Satellite only</option>
+            <option value="light">Light grey · CARTO</option>
             <option value="dark">Dark · CARTO</option>
-            <option value="sat">Satellite · Esri</option>
-            <option value="schematic">Schematic (offline)</option>
+            <option value="osm">OpenStreetMap</option>
+            <option value="schematic">Offline sketch (no internet)</option>
           </select>
         </div>
         <span class="lbl">Show values</span>
@@ -291,11 +294,16 @@
     </div>
 
     <div class="card span-12" id="sitesCard">
-      <div class="card-head"><h2>Sensor sites</h2><span class="sub">Set maintenance or offline status, fix names and coordinates</span></div>
+      <div class="card-head"><h2>Sensor nodes</h2><span class="sub">Add, move or remove nodes, set maintenance status and choose GPS or a fixed location</span>
+        <div class="row spacer" data-admin-only style="gap:8px">
+          <button class="btn" type="button" id="pickNode">Add node on map</button>
+          <label class="toggle" style="gap:8px"><span>Drag nodes on map</span><input type="checkbox" id="moveNodes"><span class="switch"></span></label>
+        </div>
+      </div>
       <div class="card-body" style="display:grid;gap:14px">
         <div class="table-wrap">
           <table class="edit-table">
-            <thead><tr><th>ID</th><th>Name</th><th>Setting</th><th>Latitude</th><th>Longitude</th><th>Status</th><th>Note</th><th class="r" data-admin-only></th></tr></thead>
+            <thead><tr><th>ID</th><th>Name</th><th>Setting</th><th>Location from</th><th>Saved latitude</th><th>Saved longitude</th><th>GPS now</th><th>Status</th><th>Note</th><th class="r" data-admin-only></th></tr></thead>
             <tbody id="siteAdminBody"></tbody>
           </table>
         </div>
@@ -303,10 +311,27 @@
           <div class="field" style="width:80px"><label for="newSiteId">New ID</label><input type="text" id="newSiteId" placeholder="S10"></div>
           <div class="field" style="flex:1 1 180px"><label for="newSiteName">Name</label><input type="text" id="newSiteName" placeholder="Site name"></div>
           <div class="field" style="width:140px"><label for="newSiteSetting">Setting</label><select id="newSiteSetting"></select></div>
-          <div class="field" style="width:110px"><label for="newSiteLat">Latitude</label><input type="number" step="0.0001" id="newSiteLat" placeholder="14.5650"></div>
-          <div class="field" style="width:120px"><label for="newSiteLng">Longitude</label><input type="number" step="0.0001" id="newSiteLng" placeholder="120.9930"></div>
-          <button class="btn primary" type="submit">Add site</button>
+          <div class="field" style="width:110px"><label for="newSiteLat">Latitude</label><input type="number" step="any" id="newSiteLat" placeholder="14.5650"></div>
+          <div class="field" style="width:120px"><label for="newSiteLng">Longitude</label><input type="number" step="any" id="newSiteLng" placeholder="120.9930"></div>
+          <button class="btn primary" type="submit">Add node</button>
         </form>
+        <p class="note">A node set to <b>GPS</b> is drawn where its GPS module says while it has a fix, and goes back to its saved location when the fix is lost for 5 minutes. Use <b>Fixed</b> for nodes without a GPS module. A node that sends readings with a new ID and a GPS position is added automatically.</p>
+      </div>
+    </div>
+
+    <div class="card span-12" id="demoCard" data-admin-only>
+      <div class="card-head"><h2>Presentation demo</h2><span class="sub">Shows how the system behaves without the hardware, for example during the thesis defense</span>
+        <a class="btn spacer" id="demoToggle" href="?demo">Start demo mode</a></div>
+      <div class="card-body" style="display:grid;gap:12px">
+        <p class="note" id="demoNote"></p>
+        <div class="row" style="gap:10px;align-items:end">
+          <div class="field" style="width:240px"><label for="demoSite">Node</label><select id="demoSite"></select></div>
+          <button class="btn" type="button" data-demo="gps">Lose GPS fix</button>
+          <button class="btn" type="button" data-demo="offline">Take node offline</button>
+          <button class="btn" type="button" data-demo="event">Loud noise event, 2 min</button>
+          <button class="btn ghost" type="button" data-demo="reset">Reset all</button>
+        </div>
+        <div class="row" id="demoState" style="gap:8px"></div>
       </div>
     </div>
 
@@ -399,7 +424,7 @@
 /* =====================================================================
    MAP
    ===================================================================== */
-const NM = createNoiseMap("map", { onSelect: id => selectSite(id, false), noticeEl: $("mapNotice") });
+const NM = createNoiseMap("map", { onSelect: id => selectSite(id, false), noticeEl: $("mapNotice"), onBasemap: k => { $("basemap").value = k; store("nma.basemap", k); } });
 const map = NM.map;
 NM.syncMarkers();
 
@@ -420,7 +445,8 @@ function renderMap(statsById) {
     mk.setTooltipContent(`<div class="tip-name">${esc(site.name)}</div>
       <div class="tip-row"><span>${state.view === "predicted" ? "Predicted" : "Measured"}</span><b class="mono">${round1(v)} dB</b></div>
       <div class="tip-row"><span>WHO limit</span><span class="mono">${lim} dB</span></div>
-      <div class="tip-row"><span>Source</span><span>${esc(cat)}</span></div>${site.status !== "active" ? `<div class="tip-row"><span>Status</span><b>${site.status === "maintenance" ? "Maintenance" : "Offline"}</b></div>` : ""}`);
+      <div class="tip-row"><span>Source</span><span>${esc(cat)}</span></div>
+      <div class="tip-row"><span>Location</span><span>${esc(gpsState(site).label)}</span></div>${site.status !== "active" ? `<div class="tip-row"><span>Status</span><b>${site.status === "maintenance" ? "Maintenance" : "Offline"}</b></div>` : ""}`);
     if ($("layerZones").checked && st.leq != null && st.leq >= CONFIG.ALERT_DB) {
       const crit = st.leq >= CONFIG.CRITICAL_DB - 5;
       L.circle([site.lat, site.lng], { radius: crit ? 320 : 240, color: cssVar("--crit"), weight: 1.5, dashArray: "5 5", fillColor: cssVar("--crit"), fillOpacity: .08, interactive: false }).addTo(NM.zoneLayer);
@@ -725,7 +751,7 @@ function renderSource() {
 
 function renderAll() {
   const statsById = Object.fromEntries(SITES.map(s => [s.id, siteStats(s)]));
-  renderKpis(statsById); renderMap(statsById); renderPanel(statsById[state.selected]); renderCharts(statsById); renderTable(statsById); renderAlerts(); renderSource(); renderPlanning();
+  renderKpis(statsById); renderMap(statsById); renderPanel(statsById[state.selected]); renderCharts(statsById); renderTable(statsById); renderAlerts(); renderSource(); renderPlanning(); renderGps(); renderDemo();
   const hidden = SITES.length - SITES.filter(s => passesFilter(s, statsById[s.id])).length;
   $("filterNote").textContent = hidden ? `${hidden} site${hidden > 1 ? "s" : ""} hidden by filters.` : "All sites shown.";
 }
@@ -876,7 +902,8 @@ async function refreshManagement() {
   const [overrides, list] = await Promise.all([Backend.siteOverrides(), Backend.notices()]);
   applySiteOverrides(overrides);
   notices = list || [];
-  renderNotices(); renderSiteAdmin(); renderLog();
+  renderNotices(); renderLog();
+  if (!$("siteAdminBody").contains(document.activeElement)) renderSiteAdmin();
 }
 
 function renderNotices() {
@@ -916,8 +943,10 @@ function renderSiteAdmin() {
       <td class="mono">${s.id}</td>
       <td><input type="text" data-f="name" value="${esc(s.name)}" aria-label="Name of ${s.id}" ${isAdmin ? "" : "disabled"}></td>
       <td><select data-f="setting" aria-label="Setting of ${s.id}" ${isAdmin ? "" : "disabled"}>${SETTINGS.map(x => `<option ${x === s.setting ? "selected" : ""}>${x}</option>`).join("")}</select></td>
-      <td><input type="number" step="0.0001" data-f="lat" value="${s.lat}" aria-label="Latitude of ${s.id}" style="width:104px" ${isAdmin ? "" : "disabled"}></td>
-      <td><input type="number" step="0.0001" data-f="lng" value="${s.lng}" aria-label="Longitude of ${s.id}" style="width:112px" ${isAdmin ? "" : "disabled"}></td>
+      <td><select data-f="location" aria-label="Location source of ${s.id}" ${isAdmin ? "" : "disabled"}><option value="gps" ${s.location !== "fixed" ? "selected" : ""}>GPS</option><option value="fixed" ${s.location === "fixed" ? "selected" : ""}>Fixed</option></select></td>
+      <td><input type="number" step="any" data-f="lat" value="${s.homeLat ?? s.lat}" aria-label="Saved latitude of ${s.id}" style="width:112px" ${isAdmin ? "" : "disabled"}></td>
+      <td><input type="number" step="any" data-f="lng" value="${s.homeLng ?? s.lng}" aria-label="Saved longitude of ${s.id}" style="width:120px" ${isAdmin ? "" : "disabled"}></td>
+      <td data-gps="${s.id}"></td>
       <td><select data-f="status" aria-label="Status of ${s.id}" ${isAdmin ? "" : "disabled"}>
         <option value="active" ${s.status === "active" ? "selected" : ""}>Active</option>
         <option value="maintenance" ${s.status === "maintenance" ? "selected" : ""}>Maintenance</option>
@@ -925,7 +954,79 @@ function renderSiteAdmin() {
       <td><input type="text" data-f="note" value="${esc(s.note || "")}" placeholder="e.g. microphone replaced" aria-label="Note for ${s.id}" ${isAdmin ? "" : "disabled"}></td>
       <td class="r" ${isAdmin ? "" : "hidden"}><div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn" type="button" data-save-site>Save</button><button class="btn ghost" type="button" data-remove-site title="Remove site">Remove</button></div></td>
     </tr>`).join("");
+  renderGps();
 }
+// GPS column and demo card change every tick, so they are drawn separately from the editable rows.
+function renderGps() {
+  document.querySelectorAll("[data-gps]").forEach(td => {
+    const site = SITES.find(s => s.id === td.dataset.gps); if (!site) return;
+    const g = gpsState(site); const fix = state.gps[site.id];
+    td.innerHTML = `<span class="gps ${g.kind === "gps" ? "ok" : g.kind === "lost" ? "lost" : ""}" title="${esc(g.label)}">${g.kind === "gps" ? `${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}` : g.kind === "lost" ? "No fix, using saved" : g.kind === "fixed" ? "Not used" : "No GPS data"}</span>${fix?.ts ? `<div class="sub">${fmtHM.format(fix.ts)}</div>` : ""}`;
+  });
+}
+function renderDemo() {
+  const on = Demo.on;
+  $("demoBar").hidden = !on;
+  $("demoToggle").textContent = on ? "Exit demo mode" : "Start demo mode";
+  $("demoToggle").href = on ? "?demo=off" : "?demo";
+  $("demoNote").textContent = on
+    ? "Demo mode is on in this browser. Both pages show sample readings and every node reports a simulated GPS position. Open the public page in another tab to show the same scenario from a resident's view."
+    : state.mode === "simulated" ? "The dashboard is already showing sample data. Start demo mode to keep it on sample data even when the server has real readings, so the defense does not depend on the hardware."
+    : "The dashboard is showing live readings. Start demo mode to switch this browser to sample data for a presentation.";
+  const sel = $("demoSite").value;
+  $("demoSite").innerHTML = SITES.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+  $("demoSite").value = SITES.some(s => s.id === sel) ? sel : state.selected;
+  const scn = Demo.scenarios(); const now = Date.now();
+  const tags = Object.entries(scn).flatMap(([id, x]) => [
+    x.gpsLost && `${siteName(id)}: GPS lost`, x.offline && `${siteName(id)}: offline`, x.eventUntil > now && `${siteName(id)}: noise event until ${fmtHM.format(x.eventUntil)}`,
+  ].filter(Boolean));
+  $("demoState").innerHTML = tags.length ? tags.map(t => `<span class="pill">${esc(t)}</span>`).join("") : `<span class="sub">No scenario running. All nodes are normal.</span>`;
+  const sc = scn[$("demoSite").value] || {};
+  document.querySelector('[data-demo="gps"]').textContent = sc.gpsLost ? "Restore GPS fix" : "Lose GPS fix";
+  document.querySelector('[data-demo="offline"]').textContent = sc.offline ? "Bring node online" : "Take node offline";
+  document.querySelectorAll("[data-demo]").forEach(b => b.disabled = state.mode !== "simulated" && b.dataset.demo !== "reset");
+}
+const siteName = id => SITES.find(s => s.id === id)?.name || id;
+$("demoSite").addEventListener("change", renderDemo);
+$("demoCard").addEventListener("click", e => {
+  const b = e.target.closest("[data-demo]"); if (!b) return;
+  const id = $("demoSite").value; const sc = Demo.scenarios()[id] || {};
+  if (b.dataset.demo === "gps") { Demo.set(id, { gpsLost: !sc.gpsLost }); toast(sc.gpsLost ? `${siteName(id)} has a GPS fix again` : `${siteName(id)} lost its GPS fix. It stays at its saved location.`); }
+  if (b.dataset.demo === "offline") { Demo.set(id, { offline: !sc.offline }); if (sc.offline) state.lastSeen[id] = Date.now(); toast(sc.offline ? `${siteName(id)} is back online` : `${siteName(id)} stopped sending readings`); }
+  if (b.dataset.demo === "event") { Demo.set(id, { eventUntil: Date.now() + 2 * MIN }); toast(`Loud noise event at ${siteName(id)} for 2 minutes`); }
+  if (b.dataset.demo === "reset") { Demo.reset(); SITES.forEach(s => state.lastSeen[s.id] = Date.now()); toast("All nodes back to normal"); }
+  tick();
+});
+
+// Add a node by clicking the map, or move nodes by dragging their pins.
+function nextNodeId() {
+  const nums = SITES.map(s => +(/^S(\d+)$/.exec(s.id)?.[1] || 0));
+  return `S${String(Math.max(0, ...nums) + 1).padStart(2, "0")}`;
+}
+$("pickNode").addEventListener("click", () => {
+  $("map").scrollIntoView({ behavior: "smooth", block: "center" });
+  $("mapMode").textContent = "Click the map where the new node is · Esc to cancel";
+  NM.pickPoint(ll => {
+    renderAll();
+    if (!ll) return;
+    $("newSiteId").value = $("newSiteId").value || nextNodeId();
+    $("newSiteLat").value = ll.lat.toFixed(6); $("newSiteLng").value = ll.lng.toFixed(6);
+    $("addSiteForm").scrollIntoView({ behavior: "smooth", block: "center" });
+    $("newSiteName").focus();
+    toast("Location picked. Give the node a name and press Add node.");
+  });
+});
+$("moveNodes").addEventListener("change", e => {
+  NM.setDraggable(e.target.checked, async (id, ll) => {
+    const site = SITES.find(s => s.id === id); if (!site) return;
+    try {
+      await Backend.saveSite({ ...site, lat: +ll.lat.toFixed(6), lng: +ll.lng.toFixed(6) });
+      toast(`Moved ${site.name}${site.location !== "fixed" && gpsState(site).kind === "gps" ? ". Its GPS position is still shown while it has a fix." : ""}`);
+      await refreshManagement(); renderAll();
+    } catch (ex) { toast(ex.message); NM.ensureMarker(site); }
+  });
+  if (e.target.checked) { $("map").scrollIntoView({ behavior: "smooth", block: "center" }); toast("Drag a node's pin to its new location"); }
+});
 $("siteAdminBody").addEventListener("click", async e => {
   const tr = e.target.closest("tr[data-site]"); if (!tr) return;
   const site = SITES.find(s => s.id === tr.dataset.site);
@@ -947,8 +1048,8 @@ $("addSiteForm").addEventListener("submit", async e => {
   if (SITES.some(s => s.id === id)) { toast(`${id} already exists.`); return; }
   if (!name || isNaN(lat) || isNaN(lng) || !$("newSiteLat").value || !$("newSiteLng").value) { toast("Enter a name, latitude and longitude."); return; }
   try {
-    await Backend.saveSite({ id, name, short: name.slice(0, 14), setting: $("newSiteSetting").value, lat, lng, status: "active", note: "" });
-    e.target.reset(); toast(`Added ${id}. It appears on the map once it sends readings.`);
+    await Backend.saveSite({ id, name, short: name.slice(0, 14), setting: $("newSiteSetting").value, lat, lng, status: "active", note: "", location: "gps" });
+    e.target.reset(); toast(`Added ${id}. ${state.mode === "simulated" ? "It now shows sample readings." : "Readings appear once the node sends data with this ID."}`);
     await refreshManagement(); renderAll();
   } catch (ex) { toast(ex.message); }
 });

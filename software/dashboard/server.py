@@ -201,6 +201,14 @@ def validate_reading(r):
         raise ValueError("laeq_db must be a number")
     if not 0 <= db <= 150:
         raise ValueError("laeq_db must be between 0 and 150")
+    # Optional GPS position. Leave lat/lng out (or send gps_fix: false) when the module has no fix.
+    if r.get("lat") is not None or r.get("lng") is not None:
+        try:
+            lat, lng = float(r.get("lat")), float(r.get("lng"))
+        except (TypeError, ValueError):
+            raise ValueError("lat and lng must both be numbers")
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise ValueError("lat/lng out of range")
 
 
 def add_reading(r):
@@ -416,6 +424,7 @@ class Handler(SimpleHTTPRequestHandler):
             "lat": lat, "lng": lng,
             "status": body.get("status") if body.get("status") in SITE_STATUSES else "active",
             "note": str(body.get("note", "")).strip()[:200],
+            "location": "fixed" if body.get("location") == "fixed" else "gps",
         }
         with lock:
             sites = [s for s in read_json(SITES_FILE, []) if s.get("id") != site["id"]]

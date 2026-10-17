@@ -26,6 +26,23 @@ From another device on the same network, use the Pi's address, for example `http
 
 If you open the HTML files directly (double-click) or in the preview, there is no server. The staff page then runs in **demo mode**: sign in as `admin` / `admin123` or `planner` / `planner123`, and changes are saved only in that browser. Demo accounts never work when the pages are served by `server.py`.
 
+## Defense demo (no hardware needed)
+
+Open either page with `?demo` at the end of the address, for example `http://localhost:8000/admin.html?demo` or `index.html?demo` from a plain file. The browser then stays on sample readings, even if the server has real data, and every node reports a simulated GPS position. A **Demo preview** bar shows it's on. `?demo=off`, or the Exit demo button, turns it off.
+
+On the staff page, the **Presentation demo** card lets you show what happens when:
+- a node **loses its GPS fix**: it stays at its saved location and the GPS column says so;
+- a node **goes offline**: an offline alert appears and the public page shows no live reading for it;
+- there's a **loud noise event** for 2 minutes: the pin turns red and an alert fires.
+
+Scenarios are saved in the browser, so a public-page tab next to the staff tab shows the same thing from a resident's view. **Reset all** puts every node back to normal.
+
+## Maps
+
+Both maps have a Google-style **Map | Satellite** switch in the corner. *Map* uses CARTO Voyager, which looks closest to Google Maps, or a dark map in dark mode. *Satellite* is Esri World Imagery with street names on top. The staff page also offers light grey, dark, OpenStreetMap and an **offline sketch**. Without internet, both pages switch to the offline sketch automatically, so the map still works at the venue.
+
+Real Google Maps tiles need a Google Cloud API key with billing enabled, so they're not included.
+
 ## Public noise map (`index.html`)
 
 Plain language, no jargon. Everything a resident needs to decide whether an area suits them:
@@ -52,7 +69,8 @@ Everything from the original dashboard: the noise map (heatmap, high-risk zones,
 | Section | Administrator | Government planner |
 |---|---|---|
 | **Planning report**: grade, Lden, day/evening/night levels, % of time above the WHO day and night limits, main source per site. Copy as CSV. | ✓ | ✓ |
-| **Sensor sites**: set a site to Active, Maintenance or Offline, add a note, fix names and coordinates, add or remove sites | edit | view |
+| **Sensor nodes**: add a node by clicking the map (**Add node on map**), move nodes by dragging their pins (**Drag nodes on map**), remove nodes, set Active, Maintenance or Offline with a note, and choose whether the location comes from **GPS** or is **Fixed**. The GPS column shows each node's live fix. | edit | view |
+| **Presentation demo**: simulate GPS loss, an offline node or a noise event (see above) | ✓ | — |
 | **Public notices**: post information, maintenance, noise warning or system problem notices, optionally for one area, with an expiry | post and remove | view |
 | **Activity log**: sign-ins, failed sign-ins, notices, site changes and rejected readings | ✓ | ✓ |
 | **Data source** settings | ✓ | — |
@@ -93,7 +111,16 @@ Sessions last 12 hours and use an HttpOnly, SameSite=Strict cookie. After 5 fail
 
    `compute_laeq` applies A-weighting and assumes the INMP441 sensitivity (−26 dBFS at 94 dB SPL). After checking against a reference sound level meter, adjust `CALIBRATION_OFFSET_DB` in `publish_reading.py`.
 
-3. That's it. With `DATA_MODE: "auto"` (the default in `CONFIG` in `assets/core.js`), both pages switch to live data as soon as the server has readings from the last 10 minutes.
+3. If the node has a GPS module (for example a NEO-6M on the Pi's serial port), pass its position:
+
+   ```python
+   from publish_reading import read_gps
+   send_reading(..., gps=read_gps())
+   ```
+
+   `read_gps()` needs `pip install pyserial`. When there's no fix (indoors, module not connected), it sends `gps_fix: false` and the dashboard keeps the node at its **saved location**. The same happens if the fix is older than 5 minutes (`GPS_STALE_SEC` in `CONFIG`). Nodes without GPS just leave `gps` out.
+
+4. That's it. With `DATA_MODE: "auto"` (the default in `CONFIG` in `assets/core.js`), both pages switch to live data as soon as the server has readings from the last 10 minutes.
 
 To stop other devices on the network from posting fake readings, set the same secret on the server and on each Pi:
 
@@ -105,6 +132,9 @@ To send a test reading without the microphone:
 
 ```bash
 python software/processing/publish_reading.py --site S03 --db 81.2 --category commercial
+python software/processing/publish_reading.py --site S03 --db 81.2 --lat 14.5741 --lng 120.9967   # with a GPS position
+python software/processing/publish_reading.py --site S03 --db 81.2 --no-fix                       # GPS without a fix
+python software/processing/publish_reading.py --site S03 --db 81.2 --read-gps                     # read the real module
 ```
 
 ### Reading format
@@ -121,9 +151,14 @@ python software/processing/publish_reading.py --site S03 --db 81.2 --category co
   "probabilities": { "vehicular": 0.71, "commercial": 0.12, "human": 0.09, "ambient": 0.06, "industrial": 0.02 },
   "lle": 0.084,
   "corr_dim": 2.61,
-  "fractal_dim": 1.52
+  "fractal_dim": 1.52,
+  "lat": 14.56472,
+  "lng": 120.99321,
+  "gps_fix": true
 }
 ```
+
+`lat`, `lng` and `gps_fix` are optional. A reading with an unknown `site_id` and a GPS position adds that node to the map automatically.
 
 `predicted_db` is the forecast for 15 minutes after `timestamp`. If your model uses a different horizon, change `FORECAST_HORIZON_MIN` in `CONFIG`. Category names match the classes in `extract_features.py`.
 
