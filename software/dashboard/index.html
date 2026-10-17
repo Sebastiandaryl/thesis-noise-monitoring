@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87,600;87,700;100,600&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="assets/leaflet.css">
 <link rel="stylesheet" href="assets/core.css">
+<script>try { const t = JSON.parse(localStorage.getItem("nma.theme")); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <style>
 .pub { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; padding-top: 16px; }
 .pub-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
@@ -127,6 +128,7 @@
     <div class="bar-meta">
       <span class="pill" id="sourcePill"><span class="dot sim" id="sourceDot"></span><span id="sourceText">Sample data</span></span>
       <span class="pill mono" id="clock">--:--</span>
+      <button class="btn icon-btn" id="themeBtn" type="button" aria-label="Switch to dark mode" title="Switch to dark mode"></button>
       <a class="btn" href="admin.html">Staff sign in</a>
     </div>
   </header>

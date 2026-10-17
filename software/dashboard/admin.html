@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87,600;87,700;100,600&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="assets/leaflet.css">
 <link rel="stylesheet" href="assets/core.css">
+<script>try { const t = JSON.parse(localStorage.getItem("nma.theme")); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 </head>
 <body class="locked">
 <div class="login" id="login" hidden>
@@ -49,6 +50,7 @@
       <button class="btn" id="openSettings" type="button" data-admin-only>
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 8h3m6 0h3M5 8a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Zm3-4h6M2 4h3m3 8h6M2 12h3"/></svg>Data source
       </button>
+      <button class="btn icon-btn" id="themeBtn" type="button" aria-label="Switch to dark mode" title="Switch to dark mode"></button>
       <a class="btn" href="index.html">Public view</a>
       <span class="userchip"><span class="avatar" aria-hidden="true"></span><span><b id="userName">—</b><small id="userRole"></small></span></span>
       <button class="btn primary" id="logoutBtn" type="button">Log out</button>
@@ -264,13 +266,13 @@
     </div>
 
     <div class="card span-6">
-      <div class="card-head"><h2>Classifier comparison</h2><span class="tag">Placeholder results</span></div>
+      <div class="card-head"><h2>Classifier comparison</h2><span class="tag" id="modelTag">Not evaluated yet</span></div>
       <div class="card-body table-wrap">
         <table class="model-table">
-          <thead><tr><th>Model</th><th class="r">Accuracy</th><th class="r">Precision</th><th class="r">Recall</th><th class="r">F1</th></tr></thead>
+          <thead><tr><th>Model</th><th>Test split</th><th class="r">Accuracy</th><th class="r">Precision</th><th class="r">Recall</th><th class="r">F1</th></tr></thead>
           <tbody id="modelBody"></tbody>
         </table>
-        <p class="note" style="margin-top:10px">Replace with your evaluation results in <span class="mono">MODEL_RESULTS</span> (assets/core.js). The chaos-enhanced model adds λ, D₂ and Df to the MFCC, RMS and spectral features.</p>
+        <p class="note" style="margin-top:10px">Scores come from <span class="mono">MODEL_RESULTS</span> in assets/core.js and stay empty until you enter your own evaluation. Report scores with whole recordings held out of training; a random split of clips from the same recordings overstates accuracy. The chaos-enhanced model adds λ, D₂ and Df to the MFCC, RMS and spectral features.</p>
       </div>
     </div>
   </section>
@@ -739,8 +741,13 @@ function renderAlerts() {
 
 function renderModels() {
   const keys = ["accuracy", "precision", "recall", "f1"];
-  const best = Object.fromEntries(keys.map(k => [k, Math.max(...MODEL_RESULTS.map(r => r[k]))]));
-  $("modelBody").innerHTML = MODEL_RESULTS.map(r => `<tr style="cursor:default"><td>${esc(r.name)}</td>${keys.map(k => `<td class="r mono ${r[k] === best[k] ? "bestcell" : ""}">${(r[k] * 100).toFixed(1)}%</td>`).join("")}</tr>`).join("");
+  const num = v => typeof v === "number" && isFinite(v);
+  const best = Object.fromEntries(keys.map(k => { const v = MODEL_RESULTS.map(r => r[k]).filter(num); return [k, v.length > 1 ? Math.max(...v) : null]; }));
+  $("modelBody").innerHTML = MODEL_RESULTS.map(r => `<tr style="cursor:default"><td>${esc(r.name)}</td><td class="sub">${esc(r.split || "—")}</td>${keys.map(k => num(r[k])
+    ? `<td class="r mono ${r[k] === best[k] ? "bestcell" : ""}">${(r[k] * 100).toFixed(1)}%</td>`
+    : `<td class="r sub" title="Not evaluated yet">—</td>`).join("")}</tr>`).join("");
+  const filled = MODEL_RESULTS.filter(r => keys.some(k => num(r[k]))).length;
+  $("modelTag").textContent = filled === 0 ? "Not evaluated yet" : filled < MODEL_RESULTS.length ? `${filled} of ${MODEL_RESULTS.length} evaluated` : "Your results";
 }
 
 function renderSource() {

@@ -60,11 +60,15 @@ const Demo = {
 };
 const Hooks = { siteAdded() {}, siteMoved() {}, sitesChanged() {} };
 
-// PLACEHOLDER classifier results. Replace with your evaluation numbers.
+// Classifier results shown on the staff dashboard. Fill these in from your own
+// evaluation (0–1, e.g. 0.912). Leave a value as null and the dashboard shows
+// "Not evaluated yet" instead of a number. Say how the test set was split:
+// scores on a random clip split can be far higher than with whole recordings
+// held out, because clips from the same recording end up in training and testing.
 const MODEL_RESULTS = [
-  { name: "Random Forest (current prototype)", accuracy: .842, precision: .836, recall: .829, f1: .832 },
-  { name: "Baseline CNN",                      accuracy: .868, precision: .861, recall: .857, f1: .859 },
-  { name: "Chaos-enhanced CNN",                accuracy: .912, precision: .907, recall: .903, f1: .905 },
+  { name: "Random Forest (current prototype)", split: "", accuracy: null, precision: null, recall: null, f1: null },
+  { name: "Baseline CNN",                      split: "", accuracy: null, precision: null, recall: null, f1: null },
+  { name: "Chaos-enhanced CNN",                split: "", accuracy: null, precision: null, recall: null, f1: null },
 ];
 
 /* =====================================================================
@@ -862,3 +866,20 @@ async function switchMode(mode) {
 }
 
 Demo.init();
+
+// Light / dark switch. Without a saved choice the pages follow the device setting.
+const SUN = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>`;
+const MOON = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1z"/></svg>`;
+function paintThemeButton() {
+  const b = document.getElementById("themeBtn"); if (!b) return;
+  const next = prefersDark() ? "light" : "dark";
+  b.innerHTML = `${next === "dark" ? MOON : SUN}<span>${next === "dark" ? "Dark" : "Light"}</span>`;
+  b.title = b.ariaLabel = `Switch to ${next} mode`;
+}
+document.getElementById("themeBtn")?.addEventListener("click", () => {
+  const next = prefersDark() ? "light" : "dark";
+  document.documentElement.dataset.theme = next; store("nma.theme", next);
+  paintThemeButton();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeButton);
+paintThemeButton();

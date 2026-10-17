@@ -187,7 +187,7 @@ software/dashboard/
 | What | Where |
 |---|---|
 | Real site coordinates and names | `DEFAULT_SITES` in `assets/core.js`, or edit them in the staff dashboard |
-| Classifier results | `MODEL_RESULTS` in `assets/core.js` |
+| Classifier results (empty until filled in; give the test split, ideally whole recordings held out) | `MODEL_RESULTS` in `assets/core.js` |
 | Alert thresholds, WHO limits, day/night hours | `CONFIG` in `assets/core.js` |
 
 Site IDs must match the `site_id` each Pi sends.
