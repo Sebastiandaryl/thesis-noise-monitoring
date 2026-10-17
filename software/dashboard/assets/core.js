@@ -640,7 +640,7 @@ const TILE_SETS = {
 const prefersDark = () => document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
 
 function createNoiseMap(elId, opts = {}) {
-  const map = L.map(elId, { zoomControl: true }).setView([14.566, 120.994], 14);
+  const map = L.map(elId, { zoomControl: true, minZoom: 4, worldCopyJump: true }).setView([14.566, 120.994], 14);
   L.control.scale({ metric: true, imperial: false, position: "bottomright" }).addTo(map);
   map.createPane("schematic"); map.getPane("schematic").style.zIndex = 250;
   const schematic = L.layerGroup();
@@ -653,21 +653,51 @@ function createNoiseMap(elId, opts = {}) {
   }).addTo(map);
   let tileLayer = null, failed = false, current = "auto";
 
+  // Offline basemap: the whole Philippines from assets/ph-basemap.js (land and city
+  // names), plus a street sketch of the DLSU study area when zoomed in close.
+  const sketchCanvas = L.canvas({ padding: 0.5, pane: "schematic" });
+  let detailLayer = null, cityTiers = [];
+  function showSketchDetail() {
+    if (!map.hasLayer(schematic)) return;
+    const z = map.getZoom();
+    cityTiers.forEach(t => { if (z >= t.minZoom) schematic.addLayer(t.layer); else schematic.removeLayer(t.layer); });
+    if (detailLayer) { if (z >= 12) schematic.addLayer(detailLayer); else schematic.removeLayer(detailLayer); }
+  }
+  map.on("zoomend", showSketchDetail);
   function buildSchematic() {
     schematic.clearLayers();
-    const water = cssVar("--map-water"), river = cssVar("--map-river"), road = cssVar("--map-road"), major = cssVar("--map-road-major"), ink = cssVar("--muted");
+    const river = cssVar("--map-river"), road = cssVar("--map-road"), major = cssVar("--map-road-major");
     const casing = cssVar("--map-casing"), majorCasing = cssVar("--map-road-major-casing"), park = cssVar("--map-park");
     const o = { pane: "schematic", interactive: false };
-    // Approximate geometry of Manila Bay and major roads around the study area.
-    L.polygon([[14.64, 120.90], [14.64, 120.955], [14.600, 120.958], [14.587, 120.974], [14.576, 120.9775], [14.568, 120.9805], [14.556, 120.984], [14.545, 120.987], [14.530, 120.9875], [14.49, 120.986], [14.49, 120.90]], { ...o, stroke: false, fillColor: water, fillOpacity: 1 }).addTo(schematic);
-    L.polyline([[14.5962, 120.958], [14.5955, 120.974], [14.596, 120.980], [14.595, 120.988], [14.5975, 120.996], [14.593, 121.005], [14.585, 121.012], [14.578, 121.020], [14.570, 121.033], [14.566, 121.045]], { ...o, color: river, weight: 9, opacity: 1 }).addTo(schematic);
-    // Parks and open spaces (approximate): Rizal Park, Manila Zoo, Rizal Memorial, Paco Park, Remedios Circle.
+    const label = (layer, ll, text, style) => L.marker(ll, { pane: "schematic", interactive: false, keyboard: false, icon: L.divIcon({ className: "", html: `<span style="${style};white-space:nowrap">${text}</span>`, iconSize: [0, 0] }) }).addTo(layer);
+    if (typeof PH_BASEMAP !== "undefined") {
+      const ph = cssVar("--map-land"), other = cssVar("--map-land-other"), coast = cssVar("--map-coast");
+      PH_BASEMAP.land.forEach(p => L.polygon(p.r, { ...o, renderer: sketchCanvas, fillColor: p.c ? ph : other, fillOpacity: 1, color: coast, weight: 0.8, smoothFactor: 1.5 }).addTo(schematic));
+      // Bigger cities appear first as you zoom in.
+      // The capital and regional centers show from zoom 5, other big cities from 8, the rest from 10.
+      const tierOf = c => c[4] ? 0 : c[3] >= 2e5 ? 1 : 2;
+      cityTiers = [5, 8, 10].map((minZoom, i) => {
+        const layer = L.layerGroup();
+        PH_BASEMAP.cities.filter(c => tierOf(c) === i).forEach(c => {
+          label(layer, [c[1], c[2]], `<i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--map-city);margin-right:4px;vertical-align:1px"></i>${esc(c[0])}`,
+            `font:${c[4] === 1 ? 700 : 600} ${c[4] ? 12 : 11}px var(--font-body);color:var(--map-city);text-shadow:0 0 3px var(--map-land),0 0 3px var(--map-land);transform:translate(-3px,-8px);display:inline-block`);
+        });
+        return { minZoom, layer };
+      });
+      label(schematic, [13.2, 118.6], "West Philippine Sea", "font:italic 600 12px var(--font-body);color:var(--map-water-ink);letter-spacing:.06em");
+      label(schematic, [12.5, 127.6], "Philippine Sea", "font:italic 600 12px var(--font-body);color:var(--map-water-ink);letter-spacing:.06em");
+      label(schematic, [14.53, 120.80], "Manila Bay", "font:italic 600 11px var(--font-body);color:var(--map-water-ink)");
+    }
+    // Approximate streets around the study area, shown from zoom 12.
+    detailLayer = L.layerGroup();
+    L.polyline([[14.5962, 120.958], [14.5955, 120.974], [14.596, 120.980], [14.595, 120.988], [14.5975, 120.996], [14.593, 121.005], [14.585, 121.012], [14.578, 121.020], [14.570, 121.033], [14.566, 121.045]], { ...o, color: river, weight: 9, opacity: 1 }).addTo(detailLayer);
+    // Parks and open spaces (approximate): Rizal Park, Manila Zoo, Rizal Memorial, Paco Park.
     [
       [[14.5850, 120.9745], [14.5850, 120.9830], [14.5800, 120.9835], [14.5795, 120.9760]],
       [[14.5675, 120.9870], [14.5672, 120.9905], [14.5635, 120.9907], [14.5638, 120.9872]],
       [[14.5640, 120.9900], [14.5640, 120.9945], [14.5595, 120.9948], [14.5592, 120.9905]],
       [[14.5825, 120.9888], [14.5825, 120.9908], [14.5808, 120.9908], [14.5808, 120.9888]],
-    ].forEach(poly => L.polygon(poly, { ...o, stroke: false, fillColor: park, fillOpacity: 1 }).addTo(schematic));
+    ].forEach(poly => L.polygon(poly, { ...o, stroke: false, fillColor: park, fillOpacity: 1 }).addTo(detailLayer));
     const roads = [
       { n: "Taft Ave", w: 5, c: major, p: [[14.5935, 120.9815], [14.5830, 120.9858], [14.5760, 120.9895], [14.5647, 120.9937], [14.5560, 120.9975], [14.5460, 121.0002], [14.5376, 121.0012], [14.5280, 121.0000]] },
       { n: "Roxas Blvd", w: 5, c: major, p: [[14.5840, 120.9770], [14.5760, 120.9790], [14.5680, 120.9820], [14.5560, 120.9855], [14.5450, 120.9885], [14.5330, 120.9895], [14.5200, 120.9905]] },
@@ -678,15 +708,12 @@ function createNoiseMap(elId, opts = {}) {
       { n: "Pres. Quirino", w: 3, c: road, p: [[14.5530, 120.9860], [14.5540, 120.9960], [14.5520, 121.0060]] },
     ];
     roads.forEach(r => {
-      L.polyline(r.p, { ...o, color: r.c === road ? casing : majorCasing, weight: r.w + 2, opacity: 1 }).addTo(schematic);
-      L.polyline(r.p, { ...o, color: r.c, weight: r.w, opacity: 1 }).addTo(schematic);
-      const mid = r.p[Math.floor(r.p.length / 2)];
-      L.marker(mid, { pane: "schematic", interactive: false, icon: L.divIcon({ className: "", html: `<span style="font:600 10px var(--font-body);color:var(--muted);white-space:nowrap;text-shadow:0 0 3px var(--map-land)">${r.n}</span>`, iconSize: [0, 0] }) }).addTo(schematic);
+      L.polyline(r.p, { ...o, color: r.c === road ? casing : majorCasing, weight: r.w + 2, opacity: 1 }).addTo(detailLayer);
+      L.polyline(r.p, { ...o, color: r.c, weight: r.w, opacity: 1 }).addTo(detailLayer);
+      label(detailLayer, r.p[Math.floor(r.p.length / 2)], r.n, "font:600 10px var(--font-body);color:var(--muted);text-shadow:0 0 3px var(--map-land)");
     });
-    const label = (ll, text, style) => L.marker(ll, { pane: "schematic", interactive: false, icon: L.divIcon({ className: "", html: `<span style="${style};white-space:nowrap">${text}</span>`, iconSize: [0, 0] }) }).addTo(schematic);
-    label([14.575, 120.962], "Manila Bay", "font:italic 600 12px var(--font-body);color:var(--map-water-ink)");
-    label([14.5828, 120.9765], "Rizal Park", "font:600 10px var(--font-body);color:var(--map-park-ink)");
-    label([14.5660, 120.9874], "Manila Zoo", "font:600 10px var(--font-body);color:var(--map-park-ink)");
+    label(detailLayer, [14.5828, 120.9765], "Rizal Park", "font:600 10px var(--font-body);color:var(--map-park-ink)");
+    label(detailLayer, [14.5660, 120.9874], "Manila Zoo", "font:600 10px var(--font-body);color:var(--map-park-ink)");
   }
 
   let labelLayer = null;
@@ -698,7 +725,8 @@ function createNoiseMap(elId, opts = {}) {
     if (labelLayer) { map.removeLayer(labelLayer); labelLayer = null; }
     typeControl && typeControl.sync(k);
     buildSchematic();
-    if (k === "schematic") { schematic.addTo(map); return; }
+    map.getContainer().classList.toggle("sketch", k === "schematic");
+    if (k === "schematic") { schematic.addTo(map); showSketchDetail(); return; }
     map.removeLayer(schematic);
     const t = TILE_SETS[k]; let loaded = 0, errors = 0;
     tileLayer = L.tileLayer(t.url, { attribution: t.attr, maxZoom: t.max, subdomains: "abcd", crossOrigin: true });
@@ -707,7 +735,7 @@ function createNoiseMap(elId, opts = {}) {
       errors++;
       if (errors >= 4 && loaded === 0 && !failed) {
         failed = true;
-        if (opts.noticeEl) { opts.noticeEl.hidden = false; opts.noticeEl.textContent = "Online map tiles are unavailable here, so the map shows an approximate offline basemap. Tiles load normally on a normal internet connection."; }
+        if (opts.noticeEl) { opts.noticeEl.hidden = false; opts.noticeEl.textContent = "No internet map here, so this is the built-in offline map of the Philippines. Street maps and satellite load on a normal internet connection."; }
         setBasemap();
       }
     });
@@ -778,9 +806,23 @@ function createNoiseMap(elId, opts = {}) {
     pin.classList.toggle("muted", muted);
     pin.querySelector("span").textContent = muted ? "—" : v != null ? Math.round(v) : "--";
   }
-  function fit() { if (SITES.length) map.fitBounds(L.latLngBounds(SITES.map(s => [s.lat, s.lng])).pad(0.12)); }
+  function fit() { if (SITES.length) map.fitBounds(L.latLngBounds(SITES.map(s => [s.lat, s.lng])).pad(0.12), { maxZoom: 15 }); }
+  const PH_BOUNDS = L.latLngBounds([4.4, 116.8], [21.2, 126.8]);
+  function fitCountry() { map.fitBounds(PH_BOUNDS); }
+
+  // "Whole Philippines" and "All nodes" buttons under the zoom control.
+  const ViewCtl = L.Control.extend({
+    onAdd() {
+      const box = L.DomUtil.create("div", "leaflet-bar map-views");
+      box.innerHTML = `<a href="#" role="button" data-v="ph" title="Show the whole Philippines" aria-label="Show the whole Philippines"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.2 2.2 12.8 0 15M10 2.5c-2.2 2.2-2.2 12.8 0 15"/></svg></a><a href="#" role="button" data-v="nodes" title="Zoom to all nodes" aria-label="Zoom to all nodes"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/><circle cx="10" cy="10" r="2.2" fill="currentColor"/></svg></a>`;
+        L.DomEvent.disableClickPropagation(box);
+        box.addEventListener("click", e => { const a = e.target.closest("[data-v]"); if (!a) return; e.preventDefault(); a.dataset.v === "ph" ? fitCountry() : fit(); });
+        return box;
+      },
+    });
+  new ViewCtl({ position: "topleft" }).addTo(map);
   new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById(elId));
-  return { map, markers, markerLayer, zoneLayer, heatLayer, setBasemap, resetFailure, ensureMarker, syncMarkers, paintPin, fit, setDraggable, pickPoint };
+  return { map, markers, markerLayer, zoneLayer, heatLayer, setBasemap, resetFailure, ensureMarker, syncMarkers, paintPin, fit, setDraggable, pickPoint, fitCountry };
 }
 
 function onThemeChange(fn) {

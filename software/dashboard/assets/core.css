@@ -23,6 +23,9 @@
   --map-water: #aadaff;
   --map-water-ink: #3b78a8;
   --map-land: #f5f3ef;
+  --map-land-other: #e8e6e1;
+  --map-coast: #b9cfe0;
+  --map-city: #3c4043;
   --map-park: #c3ecb2;
   --map-park-ink: #2e7d32;
   --map-road: #ffffff;
@@ -61,6 +64,9 @@
     --map-water: #17263c;
     --map-water-ink: #6f8fb3;
     --map-land: #1f2327;
+    --map-land-other: #191c1f;
+    --map-coast: #2e4460;
+    --map-city: #c9ced3;
     --map-park: #263c2c;
     --map-park-ink: #7fae86;
     --map-road: #3a3f45;
@@ -96,6 +102,9 @@
   --map-water: #17263c;
   --map-water-ink: #6f8fb3;
   --map-land: #1f2327;
+  --map-land-other: #191c1f;
+  --map-coast: #2e4460;
+  --map-city: #c9ced3;
   --map-park: #263c2c;
   --map-park-ink: #7fae86;
   --map-road: #3a3f45;
@@ -245,6 +254,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .map-type button { border: 0; background: transparent; height: 34px; padding: 0 14px; font: 500 13px var(--font-body); color: var(--ink-2); cursor: pointer; }
 .map-type button + button { border-left: 1px solid var(--line); }
 .map-type button[aria-pressed="true"] { color: var(--ink); font-weight: 600; background: var(--surface-2); }
+.leaflet-container.sketch { background: var(--map-water) !important; }
+.map-views a { display: grid !important; place-items: center; }
+.map-views svg { width: 18px; height: 18px; }
 .leaflet-container.picking, .leaflet-container.picking .leaflet-interactive { cursor: crosshair !important; }
 .leaflet-container.moving .site-pin { cursor: grab; }
 .gps { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }

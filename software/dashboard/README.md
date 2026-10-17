@@ -39,7 +39,11 @@ Scenarios are saved in the browser, so a public-page tab next to the staff tab s
 
 ## Maps
 
-Both maps have a Google-style **Map | Satellite** switch in the corner. *Map* uses CARTO Voyager, which looks closest to Google Maps, or a dark map in dark mode. *Satellite* is Esri World Imagery with street names on top. The staff page also offers light grey, dark, OpenStreetMap and an **offline sketch**. Without internet, both pages switch to the offline sketch automatically, so the map still works at the venue.
+Both maps have a Google-style **Map | Satellite** switch in the corner. *Map* uses CARTO Voyager, which looks closest to Google Maps, or a dark map in dark mode. *Satellite* is Esri World Imagery with street names on top. The staff page also offers light grey, dark, OpenStreetMap and an **offline map**.
+
+The map covers the whole Philippines (and the rest of the world online). Nodes are placed by their GPS latitude and longitude, wherever they are. The globe button under the zoom buttons shows the whole country, and the square button zooms to all nodes.
+
+Without internet, both pages switch to the built-in **offline map of the Philippines** (`assets/ph-basemap.js`): the coastline of every major island from Natural Earth 1:10m, city names from GeoNames that appear as you zoom in, and a street sketch around DLSU. It has no street detail elsewhere, but every node still shows at its real position. `tools/build-ph-basemap.js` regenerates the file.
 
 Real Google Maps tiles need a Google Cloud API key with billing enabled, so they're not included.
 
@@ -173,6 +177,7 @@ software/dashboard/
 ├── assets/
 │   ├── core.js       settings, sites, simulator, data adapter, sign-in, grades, shared map
 │   ├── core.css      colors, type and shared components (light and dark)
+│   ├── ph-basemap.js offline map of the Philippines (coastline and cities)
 │   └── leaflet.css   map library styles
 └── server.py         pages, staff accounts and API (Python standard library only)
 ```
