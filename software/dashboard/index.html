@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87,600;87,700;100,600&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="assets/leaflet.css">
 <link rel="stylesheet" href="assets/core.css">
+<script>try { const t = JSON.parse(localStorage.getItem("nma.theme")); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <style>
 .pub { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; padding-top: 16px; }
 .pub-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
@@ -127,6 +128,7 @@
     <div class="bar-meta">
       <span class="pill" id="sourcePill"><span class="dot sim" id="sourceDot"></span><span id="sourceText">Sample data</span></span>
       <span class="pill mono" id="clock">--:--</span>
+      <button class="btn icon-btn" id="themeBtn" type="button" aria-label="Switch to dark mode" title="Switch to dark mode"></button>
       <a class="btn" href="admin.html">Staff sign in</a>
     </div>
   </header>
@@ -136,6 +138,7 @@
     <p>See how loud each neighborhood is right now, what a normal day sounds like, and how it compares with the World Health Organization's guideline. Use it before you rent, buy or plan your day.</p>
   </section>
 
+  <div class="demo-bar" id="demoBar" hidden><b>Demo preview</b><span>These are sample readings showing how the map works once the sensors are installed.</span><a class="btn spacer" href="?demo=off">Exit demo</a></div>
   <div id="noticeArea" style="display:grid;gap:8px"></div>
 
   <div class="picker">
@@ -286,11 +289,12 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script src="assets/ph-basemap.js"></script>
 <script src="assets/core.js"></script>
 <script>
 "use strict";
 const pub = { mapMode: "now", sort: "quiet", notices: [], pvRange: 180 };
-const NM = createNoiseMap("map", { onSelect: id => selectArea(id, false), noticeEl: $("mapNotice") });
+const NM = createNoiseMap("map", { onSelect: id => selectArea(id, false), noticeEl: $("mapNotice"), onBasemap: k => store("nma.pub.basemap", k) });
 const map = NM.map;
 NM.markerLayer.addTo(map);
 
@@ -304,8 +308,9 @@ const NOTICE_ICON = {
 NOTICE_ICON.error = NOTICE_ICON.warning;
 
 const siteName = id => SITES.find(s => s.id === id)?.name || id;
-const currentLevel = site => site.status !== "active" ? null : (state.latest[site.id] && Date.now() - state.latest[site.id].ts < 5 * MIN ? state.latest[site.id].db : valueAt(site.id, liveMinute()));
-const predLevel = site => site.status !== "active" ? null : valueAt(site.id, liveMinute() + CONFIG.FORECAST_HORIZON_MIN, "pred");
+const isOnline = site => Date.now() - (state.lastSeen[site.id] || 0) < CONFIG.OFFLINE_AFTER_SEC * 1000;
+const currentLevel = site => site.status !== "active" || !isOnline(site) ? null : (state.latest[site.id] && Date.now() - state.latest[site.id].ts < 5 * MIN ? state.latest[site.id].db : valueAt(site.id, liveMinute()));
+const predLevel = site => site.status !== "active" || !isOnline(site) ? null : valueAt(site.id, liveMinute() + CONFIG.FORECAST_HORIZON_MIN, "pred");
 // Compare each forecast with what was measured at the time it was made for (the bucket holds both).
 function forecastAccuracy(siteId, len = HISTORY_MIN) {
   const h = state.history[siteId] || {}; const nowM = liveMinute();
@@ -592,7 +597,7 @@ Loop.render = render;
 Hooks.sitesChanged = () => { NM.syncMarkers(); buildAreaOptions(); };
 Hooks.siteAdded = Hooks.sitesChanged;
 Hooks.siteMoved = site => NM.ensureMarker(site);
-onThemeChange(() => { themeCharts(); NM.setBasemap("auto"); render(); });
+onThemeChange(() => { themeCharts(); NM.setBasemap(); render(); });
 themeCharts();
 setInterval(() => $("clock").textContent = `${fmtHM.format(Date.now())} PHT`, 10000);
 $("clock").textContent = `${fmtHM.format(Date.now())} PHT`;
@@ -609,7 +614,8 @@ async function refreshPublicData() {
   await refreshPublicData();
   const saved = store("nma.pub.site"); if (saved && SITES.some(s => s.id === saved)) state.selected = saved;
   buildAreaOptions();
-  NM.syncMarkers(); NM.setBasemap("auto"); NM.fit();
+  $("demoBar").hidden = !Demo.on;
+  NM.syncMarkers(); NM.setBasemap(store("nma.pub.basemap") || "auto"); NM.fit();
   await switchMode(await resolveMode());
   setInterval(async () => { await refreshPublicData(); render(); }, 60000);
 })();

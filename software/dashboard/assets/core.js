@@ -20,6 +20,7 @@ const CONFIG = {
   ALERT_DB: 70,                  // warning alert when a site reaches this
   CRITICAL_DB: 85,               // critical alert
   OFFLINE_AFTER_SEC: 120,        // node shows offline after this long without data
+  GPS_STALE_SEC: 300,            // without a GPS fix for this long, a node goes back to its saved location
   TIMEZONE: "Asia/Manila",
 };
 
@@ -40,14 +41,34 @@ const DEFAULT_SITES = [
 
 // Working copy of the sites. Admin edits (from server.py or demo mode) are
 // merged in by applySiteOverrides(). status: active | maintenance | offline.
-let SITES = DEFAULT_SITES.map(s => ({ status: "active", note: "", ...s, mix: { ...s.mix } }));
+// location: "gps" follows the node's GPS when it has a fix, "fixed" always uses
+// the saved coordinates. homeLat/homeLng keep the saved coordinates as the fallback.
+let SITES = DEFAULT_SITES.map(s => ({ status: "active", note: "", location: "gps", ...s, homeLat: s.lat, homeLng: s.lng, mix: { ...s.mix } }));
+
+// Presentation demo: open either page with ?demo to force sample data, ?demo=off to leave it.
+// Scenarios (GPS lost, node offline, noise event) are stored per browser so a
+// public tab and a staff tab stay in step during a defense.
+const Demo = {
+  get on() { return !!store("nma.demo"); },
+  init() {
+    const q = new URLSearchParams(location.search);
+    if (q.has("demo")) store("nma.demo", q.get("demo") !== "off");
+  },
+  scenarios() { return store("nma.demo.scn") || {}; },
+  set(siteId, patch) { const all = this.scenarios(); all[siteId] = { ...(all[siteId] || {}), ...patch }; store("nma.demo.scn", all); },
+  reset() { store("nma.demo.scn", {}); },
+};
 const Hooks = { siteAdded() {}, siteMoved() {}, sitesChanged() {} };
 
-// PLACEHOLDER classifier results. Replace with your evaluation numbers.
+// Classifier results shown on the staff dashboard. Fill these in from your own
+// evaluation (0–1, e.g. 0.912). Leave a value as null and the dashboard shows
+// "Not evaluated yet" instead of a number. Say how the test set was split:
+// scores on a random clip split can be far higher than with whole recordings
+// held out, because clips from the same recording end up in training and testing.
 const MODEL_RESULTS = [
-  { name: "Random Forest (current prototype)", accuracy: .842, precision: .836, recall: .829, f1: .832 },
-  { name: "Baseline CNN",                      accuracy: .868, precision: .861, recall: .857, f1: .859 },
-  { name: "Chaos-enhanced CNN",                accuracy: .912, precision: .907, recall: .903, f1: .905 },
+  { name: "Random Forest (current prototype)", split: "", accuracy: null, precision: null, recall: null, f1: null },
+  { name: "Baseline CNN",                      split: "", accuracy: null, precision: null, recall: null, f1: null },
+  { name: "Chaos-enhanced CNN",                split: "", accuracy: null, precision: null, recall: null, f1: null },
 ];
 
 /* =====================================================================
@@ -107,6 +128,7 @@ const state = {
   history: {},           // per-site minute buckets
   latest: {},            // per-site latest normalized reading
   lastSeen: {},          // per-site ms of last reading
+  gps: {},               // per-site { fix, ts, lat, lng } from the latest reading
   alerts: [],            // alert log
   selected: SITES[0].id,
   view: "measured",
@@ -144,19 +166,25 @@ function normalizeReading(raw) {
     lle: raw.lle != null ? +raw.lle : null,
     d2: raw.corr_dim != null ? +raw.corr_dim : null,
     df: raw.fractal_dim != null ? +raw.fractal_dim : null,
-    lat: raw.lat, lng: raw.lng, name: raw.name,
+    lat: raw.lat != null && raw.lat !== "" && !isNaN(+raw.lat) ? +raw.lat : null,
+    lng: raw.lng != null && raw.lng !== "" && !isNaN(+raw.lng) ? +raw.lng : null,
+    gpsFix: raw.gps_fix != null ? !!raw.gps_fix : null,
+    name: raw.name,
   };
 }
 
 function ingest(r) {
   if (!r.siteId) return;
   let site = SITES.find(s => s.id === r.siteId);
-  if (!site && r.lat != null && r.lng != null) {
-    site = { id: r.siteId, name: r.name || r.siteId, short: r.name || r.siteId, setting: "Sensor", profile: "roadside", lat: +r.lat, lng: +r.lng, base: 65, mix: {}, status: "active", note: "" };
+  const hasFix = r.lat != null && r.lng != null && r.gpsFix !== false;
+  if (!site && hasFix) {
+    site = { id: r.siteId, name: r.name || r.siteId, short: r.name || r.siteId, setting: "Sensor", profile: "roadside", lat: r.lat, lng: r.lng, homeLat: r.lat, homeLng: r.lng, location: "gps", base: 65, mix: {}, status: "active", note: "" };
     SITES.push(site); state.history[site.id] = {}; Hooks.siteAdded(site);
   }
   if (!site) return;
-  if (r.lat != null && r.lng != null && (+r.lat !== site.lat || +r.lng !== site.lng)) { site.lat = +r.lat; site.lng = +r.lng; Hooks.siteMoved(site); }
+  if (hasFix) state.gps[site.id] = { fix: true, ts: r.ts, lat: r.lat, lng: r.lng };
+  else if (r.gpsFix === false || state.gps[site.id]) state.gps[site.id] = { ...(state.gps[site.id] || {}), fix: false };
+  placeSite(site);
   const m = minuteOf(r.ts);
   if (r.db != null) {
     const b = bucket(r.siteId, m);
@@ -166,6 +194,21 @@ function ingest(r) {
   if (r.pred != null) bucket(r.siteId, m + CONFIG.FORECAST_HORIZON_MIN).pred = r.pred;
   state.latest[r.siteId] = r;
   state.lastSeen[r.siteId] = Date.now();
+}
+
+// Where a node is drawn: its GPS position while the fix is fresh, otherwise the saved location.
+function gpsState(site) {
+  if (site.location === "fixed") return { kind: "fixed", label: "Saved location (GPS not used)" };
+  const g = state.gps[site.id];
+  if (!g) return { kind: "none", label: "Saved location (no GPS data)" };
+  const age = (Date.now() - (g.ts || 0)) / 1000;
+  if (g.fix && age < CONFIG.GPS_STALE_SEC) return { kind: "gps", label: "GPS fix", lat: g.lat, lng: g.lng };
+  return { kind: "lost", label: "Saved location (no GPS fix)" };
+}
+function placeSite(site) {
+  const g = gpsState(site);
+  const lat = g.kind === "gps" ? g.lat : site.homeLat ?? site.lat, lng = g.kind === "gps" ? g.lng : site.homeLng ?? site.lng;
+  if (lat !== site.lat || lng !== site.lng) { site.lat = lat; site.lng = lng; Hooks.siteMoved(site); }
 }
 
 /* =====================================================================
@@ -240,13 +283,20 @@ const Sim = {
     });
   },
   readings() {
-    const now = Date.now();
-    return SITES.filter(site => site.status === "active").map(site => {
-      const { db } = this.level(site, now, 1.2);
+    const now = Date.now(); const scn = Demo.scenarios();
+    // A node set offline in the demo stops sending, so it shows offline right away.
+    SITES.forEach(site => { if (scn[site.id]?.offline && now - (state.lastSeen[site.id] || 0) < CONFIG.OFFLINE_AFTER_SEC * 1000) state.lastSeen[site.id] = now - CONFIG.OFFLINE_AFTER_SEC * 1000 - 1; });
+    return SITES.filter(site => site.status === "active" && !scn[site.id]?.offline).map(site => {
+      const sc = scn[site.id] || {};
+      let { db } = this.level(site, now, 1.2);
+      if (sc.eventUntil > now) db = clamp(86 + gauss() * 2, 80, 100);
+      // GPS: a few metres of jitter around the saved point, like a real module.
+      const home = [site.homeLat ?? site.lat, site.homeLng ?? site.lng];
+      const gps = sc.gpsLost ? { gps_fix: false } : { gps_fix: true, lat: +(home[0] + gauss() * 0.00002).toFixed(6), lng: +(home[1] + gauss() * 0.00002).toFixed(6) };
       const cat = this.sampleCat(site, now);
       const futureMs = now + CONFIG.FORECAST_HORIZON_MIN * MIN;
       const pred = clamp(site.base + this.profileAt(site, futureMs) + (this.smooth[site.id] || 0) * 0.5 + gauss() * 1.2, 32, 108);
-      return { site_id: site.id, timestamp: new Date(now).toISOString(), laeq_db: +db.toFixed(1), predicted_db: +pred.toFixed(1), category: cat, probabilities: this.probs(site, cat), ...(() => { const c = this.chaosMetrics(site); return { lle: c.lle, corr_dim: c.d2, fractal_dim: c.df }; })() };
+      return { site_id: site.id, timestamp: new Date(now).toISOString(), laeq_db: +db.toFixed(1), predicted_db: +pred.toFixed(1), category: cat, ...gps, probabilities: this.probs(site, cat), ...(() => { const c = this.chaosMetrics(site); return { lle: c.lle, corr_dim: c.d2, fractal_dim: c.df }; })() };
     });
   },
 };
@@ -336,7 +386,7 @@ function evaluateAlerts(minute, silent) {
       warn: db != null && db >= CONFIG.ALERT_DB && db < CONFIG.CRITICAL_DB,
       info: db != null && db < CONFIG.ALERT_DB && pred != null && pred >= CONFIG.ALERT_DB,
     };
-    if (state.mode === "api") conds.offline = site.status === "active" && !siteStats(site).online;
+    conds.offline = site.status === "active" && !siteStats(site).online;
     for (const [type, on] of Object.entries(conds)) {
       const active = state.alerts.find(a => a.site === site.id && a.type === type && !a.end);
       if (on && !active) state.alerts.unshift({ id: `${site.id}-${type}-${minute}`, site: site.id, type, start: ms, end: null, peak: type === "info" ? pred : db, ack: silent && minute < liveMinute() - 30 });
@@ -446,7 +496,7 @@ const Backend = {
     return this.dGet("sites", []);
   },
   async saveSite(site) {
-    const clean = { id: site.id, name: site.name, short: site.short, setting: site.setting, lat: +site.lat, lng: +site.lng, status: site.status, note: site.note || "" };
+    const clean = { id: site.id, name: site.name, short: site.short, setting: site.setting, lat: +site.lat, lng: +site.lng, status: site.status, note: site.note || "", location: site.location === "fixed" ? "fixed" : "gps" };
     if (await this.detect() === "server") return this.req("PUT", `/api/sites/${encodeURIComponent(site.id)}`, clean);
     this.dRequire("admin");
     const all = this.dGet("sites", []).filter(x => x.id !== site.id);
@@ -478,14 +528,16 @@ function applySiteOverrides(list) {
     const i = SITES.findIndex(s => s.id === o.id);
     if (o.removed) { if (i >= 0) SITES.splice(i, 1); return; }
     const fields = {};
-    ["name", "short", "setting", "status", "note"].forEach(k => { if (o[k] != null && o[k] !== "") fields[k] = o[k]; });
+    ["name", "short", "setting", "status", "note", "location"].forEach(k => { if (o[k] != null && o[k] !== "") fields[k] = o[k]; });
     if (o.note === "") fields.note = "";
     if (o.lat != null && !isNaN(+o.lat)) fields.lat = +o.lat;
     if (o.lng != null && !isNaN(+o.lng)) fields.lng = +o.lng;
-    if (i >= 0) Object.assign(SITES[i], fields);
+    if (fields.lat != null) fields.homeLat = fields.lat;
+    if (fields.lng != null) fields.homeLng = fields.lng;
+    if (i >= 0) { Object.assign(SITES[i], fields); placeSite(SITES[i]); }
     else if (fields.lat != null && fields.lng != null) {
       const profile = SETTING_PROFILE[fields.setting] || "roadside";
-      SITES.push({ id: o.id, name: fields.name || o.id, short: fields.short || fields.name || o.id, setting: fields.setting || "Roadside", profile, base: PROFILE_BASE[profile], mix: { vehicular: .4, human: .2, commercial: .15, ambient: .2, industrial: .05 }, status: "active", note: "", ...fields });
+      SITES.push({ id: o.id, name: fields.name || o.id, short: fields.short || fields.name || o.id, setting: fields.setting || "Roadside", profile, base: PROFILE_BASE[profile], mix: { vehicular: .4, human: .2, commercial: .15, ambient: .2, industrial: .05 }, status: "active", note: "", location: "gps", ...fields });
       state.history[o.id] = state.history[o.id] || {};
     }
   });
@@ -495,6 +547,7 @@ function applySiteOverrides(list) {
 
 // Decide simulated vs live. "auto" goes live only when server.py has fresh readings.
 async function resolveMode() {
+  if (Demo.on) return "simulated";
   const saved = store("nma.cfg");
   if (saved) { CONFIG.API_URL = saved.url || CONFIG.API_URL; CONFIG.POLL_SECONDS = saved.poll || CONFIG.POLL_SECONDS; }
   const mode = saved?.mode || CONFIG.DATA_MODE;
@@ -578,7 +631,11 @@ function hourRanges(hours) {
 /* =====================================================================
    SHARED MAP
    ===================================================================== */
+// "streets" (CARTO Voyager) looks closest to Google Maps; "hybrid" is satellite with street names on top.
 const TILE_SETS = {
+  streets: { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap contributors © CARTO", max: 20 },
+  hybrid: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "Imagery © Esri · © OpenStreetMap contributors © CARTO", max: 19,
+            labels: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png" },
   osm:   { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attr: "© OpenStreetMap contributors", max: 19 },
   light: { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap contributors © CARTO", max: 20 },
   dark:  { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap contributors © CARTO", max: 20 },
@@ -587,7 +644,7 @@ const TILE_SETS = {
 const prefersDark = () => document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
 
 function createNoiseMap(elId, opts = {}) {
-  const map = L.map(elId, { zoomControl: true }).setView([14.566, 120.994], 14);
+  const map = L.map(elId, { zoomControl: true, minZoom: 4, worldCopyJump: true }).setView([14.566, 120.994], 14);
   L.control.scale({ metric: true, imperial: false, position: "bottomright" }).addTo(map);
   map.createPane("schematic"); map.getPane("schematic").style.zIndex = 250;
   const schematic = L.layerGroup();
@@ -600,13 +657,51 @@ function createNoiseMap(elId, opts = {}) {
   }).addTo(map);
   let tileLayer = null, failed = false, current = "auto";
 
+  // Offline basemap: the whole Philippines from assets/ph-basemap.js (land and city
+  // names), plus a street sketch of the DLSU study area when zoomed in close.
+  const sketchCanvas = L.canvas({ padding: 0.5, pane: "schematic" });
+  let detailLayer = null, cityTiers = [];
+  function showSketchDetail() {
+    if (!map.hasLayer(schematic)) return;
+    const z = map.getZoom();
+    cityTiers.forEach(t => { if (z >= t.minZoom) schematic.addLayer(t.layer); else schematic.removeLayer(t.layer); });
+    if (detailLayer) { if (z >= 12) schematic.addLayer(detailLayer); else schematic.removeLayer(detailLayer); }
+  }
+  map.on("zoomend", showSketchDetail);
   function buildSchematic() {
     schematic.clearLayers();
-    const water = cssVar("--map-water"), river = cssVar("--map-river"), road = cssVar("--map-road"), major = cssVar("--map-road-major"), ink = cssVar("--muted");
+    const river = cssVar("--map-river"), road = cssVar("--map-road"), major = cssVar("--map-road-major");
+    const casing = cssVar("--map-casing"), majorCasing = cssVar("--map-road-major-casing"), park = cssVar("--map-park");
     const o = { pane: "schematic", interactive: false };
-    // Approximate geometry of Manila Bay and major roads around the study area.
-    L.polygon([[14.64, 120.90], [14.64, 120.955], [14.600, 120.958], [14.587, 120.974], [14.576, 120.9775], [14.568, 120.9805], [14.556, 120.984], [14.545, 120.987], [14.530, 120.9875], [14.49, 120.986], [14.49, 120.90]], { ...o, stroke: false, fillColor: water, fillOpacity: 1 }).addTo(schematic);
-    L.polyline([[14.5962, 120.958], [14.5955, 120.974], [14.596, 120.980], [14.595, 120.988], [14.5975, 120.996], [14.593, 121.005], [14.585, 121.012], [14.578, 121.020], [14.570, 121.033], [14.566, 121.045]], { ...o, color: river, weight: 9, opacity: 1 }).addTo(schematic);
+    const label = (layer, ll, text, style) => L.marker(ll, { pane: "schematic", interactive: false, keyboard: false, icon: L.divIcon({ className: "", html: `<span style="${style};white-space:nowrap">${text}</span>`, iconSize: [0, 0] }) }).addTo(layer);
+    if (typeof PH_BASEMAP !== "undefined") {
+      const ph = cssVar("--map-land"), other = cssVar("--map-land-other"), coast = cssVar("--map-coast");
+      PH_BASEMAP.land.forEach(p => L.polygon(p.r, { ...o, renderer: sketchCanvas, fillColor: p.c ? ph : other, fillOpacity: 1, color: coast, weight: 0.8, smoothFactor: 1.5 }).addTo(schematic));
+      // Bigger cities appear first as you zoom in.
+      // The capital and regional centers show from zoom 5, other big cities from 8, the rest from 10.
+      const tierOf = c => c[4] ? 0 : c[3] >= 2e5 ? 1 : 2;
+      cityTiers = [5, 8, 10].map((minZoom, i) => {
+        const layer = L.layerGroup();
+        PH_BASEMAP.cities.filter(c => tierOf(c) === i).forEach(c => {
+          label(layer, [c[1], c[2]], `<i style="display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--map-city);margin-right:4px;vertical-align:1px"></i>${esc(c[0])}`,
+            `font:${c[4] === 1 ? 700 : 600} ${c[4] ? 12 : 11}px var(--font-body);color:var(--map-city);text-shadow:0 0 3px var(--map-land),0 0 3px var(--map-land);transform:translate(-3px,-8px);display:inline-block`);
+        });
+        return { minZoom, layer };
+      });
+      label(schematic, [13.2, 118.6], "West Philippine Sea", "font:italic 600 12px var(--font-body);color:var(--map-water-ink);letter-spacing:.06em");
+      label(schematic, [12.5, 127.6], "Philippine Sea", "font:italic 600 12px var(--font-body);color:var(--map-water-ink);letter-spacing:.06em");
+      label(schematic, [14.53, 120.80], "Manila Bay", "font:italic 600 11px var(--font-body);color:var(--map-water-ink)");
+    }
+    // Approximate streets around the study area, shown from zoom 12.
+    detailLayer = L.layerGroup();
+    L.polyline([[14.5962, 120.958], [14.5955, 120.974], [14.596, 120.980], [14.595, 120.988], [14.5975, 120.996], [14.593, 121.005], [14.585, 121.012], [14.578, 121.020], [14.570, 121.033], [14.566, 121.045]], { ...o, color: river, weight: 9, opacity: 1 }).addTo(detailLayer);
+    // Parks and open spaces (approximate): Rizal Park, Manila Zoo, Rizal Memorial, Paco Park.
+    [
+      [[14.5850, 120.9745], [14.5850, 120.9830], [14.5800, 120.9835], [14.5795, 120.9760]],
+      [[14.5675, 120.9870], [14.5672, 120.9905], [14.5635, 120.9907], [14.5638, 120.9872]],
+      [[14.5640, 120.9900], [14.5640, 120.9945], [14.5595, 120.9948], [14.5592, 120.9905]],
+      [[14.5825, 120.9888], [14.5825, 120.9908], [14.5808, 120.9908], [14.5808, 120.9888]],
+    ].forEach(poly => L.polygon(poly, { ...o, stroke: false, fillColor: park, fillOpacity: 1 }).addTo(detailLayer));
     const roads = [
       { n: "Taft Ave", w: 5, c: major, p: [[14.5935, 120.9815], [14.5830, 120.9858], [14.5760, 120.9895], [14.5647, 120.9937], [14.5560, 120.9975], [14.5460, 121.0002], [14.5376, 121.0012], [14.5280, 121.0000]] },
       { n: "Roxas Blvd", w: 5, c: major, p: [[14.5840, 120.9770], [14.5760, 120.9790], [14.5680, 120.9820], [14.5560, 120.9855], [14.5450, 120.9885], [14.5330, 120.9895], [14.5200, 120.9905]] },
@@ -617,21 +712,25 @@ function createNoiseMap(elId, opts = {}) {
       { n: "Pres. Quirino", w: 3, c: road, p: [[14.5530, 120.9860], [14.5540, 120.9960], [14.5520, 121.0060]] },
     ];
     roads.forEach(r => {
-      L.polyline(r.p, { ...o, color: r.c === road ? ink : major, weight: r.w + 2, opacity: .25 }).addTo(schematic);
-      L.polyline(r.p, { ...o, color: r.c, weight: r.w, opacity: 1 }).addTo(schematic);
-      const mid = r.p[Math.floor(r.p.length / 2)];
-      L.marker(mid, { pane: "schematic", interactive: false, icon: L.divIcon({ className: "", html: `<span style="font:600 10px var(--font-body);color:var(--muted);white-space:nowrap;text-shadow:0 0 3px var(--map-land)">${r.n}</span>`, iconSize: [0, 0] }) }).addTo(schematic);
+      L.polyline(r.p, { ...o, color: r.c === road ? casing : majorCasing, weight: r.w + 2, opacity: 1 }).addTo(detailLayer);
+      L.polyline(r.p, { ...o, color: r.c, weight: r.w, opacity: 1 }).addTo(detailLayer);
+      label(detailLayer, r.p[Math.floor(r.p.length / 2)], r.n, "font:600 10px var(--font-body);color:var(--muted);text-shadow:0 0 3px var(--map-land)");
     });
-    L.marker([14.575, 120.962], { pane: "schematic", interactive: false, icon: L.divIcon({ className: "", html: `<span style="font:italic 600 12px var(--font-body);color:var(--muted);white-space:nowrap">Manila Bay</span>`, iconSize: [0, 0] }) }).addTo(schematic);
+    label(detailLayer, [14.5828, 120.9765], "Rizal Park", "font:600 10px var(--font-body);color:var(--map-park-ink)");
+    label(detailLayer, [14.5660, 120.9874], "Manila Zoo", "font:600 10px var(--font-body);color:var(--map-park-ink)");
   }
 
+  let labelLayer = null;
   function setBasemap(key = current) {
     current = key;
     let k = failed ? "schematic" : key;
-    if (k === "auto") k = prefersDark() ? "dark" : "light";
+    if (k === "auto") k = prefersDark() ? "dark" : "streets";
     if (tileLayer) { map.removeLayer(tileLayer); tileLayer = null; }
+    if (labelLayer) { map.removeLayer(labelLayer); labelLayer = null; }
+    typeControl && typeControl.sync(k);
     buildSchematic();
-    if (k === "schematic") { schematic.addTo(map); return; }
+    map.getContainer().classList.toggle("sketch", k === "schematic");
+    if (k === "schematic") { schematic.addTo(map); showSketchDetail(); return; }
     map.removeLayer(schematic);
     const t = TILE_SETS[k]; let loaded = 0, errors = 0;
     tileLayer = L.tileLayer(t.url, { attribution: t.attr, maxZoom: t.max, subdomains: "abcd", crossOrigin: true });
@@ -640,11 +739,46 @@ function createNoiseMap(elId, opts = {}) {
       errors++;
       if (errors >= 4 && loaded === 0 && !failed) {
         failed = true;
-        if (opts.noticeEl) { opts.noticeEl.hidden = false; opts.noticeEl.textContent = "Online map tiles are unavailable here, so the map shows an approximate offline basemap. Tiles load normally on a normal internet connection."; }
+        if (opts.noticeEl) { opts.noticeEl.hidden = false; opts.noticeEl.textContent = "No internet map here, so this is the built-in offline map of the Philippines. Street maps and satellite load on a normal internet connection."; }
         setBasemap();
       }
     });
     tileLayer.addTo(map);
+    if (t.labels) labelLayer = L.tileLayer(t.labels, { maxZoom: t.max, subdomains: "abcd", crossOrigin: true }).addTo(map);
+  }
+
+  // Google-style "Map | Satellite" switch in the corner of the map.
+  let typeControl = null;
+  if (opts.typeControl !== false) {
+    const Ctl = L.Control.extend({
+      onAdd() {
+        const box = L.DomUtil.create("div", "map-type");
+        box.innerHTML = `<button type="button" data-k="auto">Map</button><button type="button" data-k="hybrid">Satellite</button>`;
+        L.DomEvent.disableClickPropagation(box);
+        box.addEventListener("click", e => {
+          const b = e.target.closest("[data-k]"); if (!b) return;
+          resetFailure(); setBasemap(b.dataset.k); opts.onBasemap && opts.onBasemap(b.dataset.k);
+        });
+        return box;
+      },
+    });
+    typeControl = new Ctl({ position: "bottomleft" }); typeControl.addTo(map);
+    typeControl.sync = k => typeControl.getContainer().querySelectorAll("[data-k]").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === "hybrid" ? k === "hybrid" || k === "sat" : !(k === "hybrid" || k === "sat")));
+  }
+
+  // Staff tools: drag pins to move nodes, or click the map to pick a point.
+  let dragHandler = null;
+  function setDraggable(on, onMove) {
+    dragHandler = on ? onMove : null;
+    Object.values(markers).forEach(mk => { if (mk.dragging) on ? mk.dragging.enable() : mk.dragging.disable(); });
+    map.getContainer().classList.toggle("moving", on);
+  }
+  function pickPoint(cb) {
+    map.getContainer().classList.add("picking");
+    const done = e => { map.getContainer().classList.remove("picking"); cb(e ? e.latlng : null); document.removeEventListener("keydown", esc); };
+    const esc = e => { if (e.key === "Escape") { map.off("click", done); done(null); } };
+    document.addEventListener("keydown", esc);
+    map.once("click", done);
   }
   function resetFailure() { failed = false; if (opts.noticeEl) opts.noticeEl.hidden = true; }
 
@@ -655,6 +789,8 @@ function createNoiseMap(elId, opts = {}) {
     mk.bindTooltip("", { className: "site-tip", direction: "top", offset: [0, -16] });
     mk.on("click", () => opts.onSelect && opts.onSelect(site.id));
     markers[site.id] = mk;
+    mk.on("add", () => { if (dragHandler && mk.dragging) mk.dragging.enable(); });
+    mk.on("dragend", () => dragHandler && dragHandler(site.id, mk.getLatLng()));
     return mk;
   }
   function syncMarkers() {
@@ -674,9 +810,23 @@ function createNoiseMap(elId, opts = {}) {
     pin.classList.toggle("muted", muted);
     pin.querySelector("span").textContent = muted ? "—" : v != null ? Math.round(v) : "--";
   }
-  function fit() { if (SITES.length) map.fitBounds(L.latLngBounds(SITES.map(s => [s.lat, s.lng])).pad(0.12)); }
+  function fit() { if (SITES.length) map.fitBounds(L.latLngBounds(SITES.map(s => [s.lat, s.lng])).pad(0.12), { maxZoom: 15 }); }
+  const PH_BOUNDS = L.latLngBounds([4.4, 116.8], [21.2, 126.8]);
+  function fitCountry() { map.fitBounds(PH_BOUNDS); }
+
+  // "Whole Philippines" and "All nodes" buttons under the zoom control.
+  const ViewCtl = L.Control.extend({
+    onAdd() {
+      const box = L.DomUtil.create("div", "leaflet-bar map-views");
+      box.innerHTML = `<a href="#" role="button" data-v="ph" title="Show the whole Philippines" aria-label="Show the whole Philippines"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="7.5"/><path d="M2.5 10h15M10 2.5c2.2 2.2 2.2 12.8 0 15M10 2.5c-2.2 2.2-2.2 12.8 0 15"/></svg></a><a href="#" role="button" data-v="nodes" title="Zoom to all nodes" aria-label="Zoom to all nodes"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/><circle cx="10" cy="10" r="2.2" fill="currentColor"/></svg></a>`;
+        L.DomEvent.disableClickPropagation(box);
+        box.addEventListener("click", e => { const a = e.target.closest("[data-v]"); if (!a) return; e.preventDefault(); a.dataset.v === "ph" ? fitCountry() : fit(); });
+        return box;
+      },
+    });
+  new ViewCtl({ position: "topleft" }).addTo(map);
   new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById(elId));
-  return { map, markers, markerLayer, zoneLayer, heatLayer, setBasemap, resetFailure, ensureMarker, syncMarkers, paintPin, fit };
+  return { map, markers, markerLayer, zoneLayer, heatLayer, setBasemap, resetFailure, ensureMarker, syncMarkers, paintPin, fit, setDraggable, pickPoint, fitCountry };
 }
 
 function onThemeChange(fn) {
@@ -707,10 +857,29 @@ async function tick() {
 }
 async function switchMode(mode) {
   clearInterval(Loop.timer);
-  state.mode = mode; state.alerts = []; state.latest = {}; state.lastSeen = {};
+  state.mode = mode; state.alerts = []; state.latest = {}; state.lastSeen = {}; state.gps = {};
   SITES.forEach(s => state.history[s.id] = {});
   if (mode === "simulated") { Sim.seed(); for (let m = liveMinute() - 180; m < liveMinute(); m++) evaluateAlerts(m, true); }
   else { (await DataSource.fetchHistory()).map(normalizeReading).forEach(ingest); }
   await tick();
   Loop.timer = setInterval(tick, CONFIG.POLL_SECONDS * 1000);
 }
+
+Demo.init();
+
+// Light / dark switch. Without a saved choice the pages follow the device setting.
+const SUN = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v1.6M8 12.9v1.6M1.5 8h1.6M12.9 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>`;
+const MOON = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1z"/></svg>`;
+function paintThemeButton() {
+  const b = document.getElementById("themeBtn"); if (!b) return;
+  const next = prefersDark() ? "light" : "dark";
+  b.innerHTML = `${next === "dark" ? MOON : SUN}<span>${next === "dark" ? "Dark" : "Light"}</span>`;
+  b.title = b.ariaLabel = `Switch to ${next} mode`;
+}
+document.getElementById("themeBtn")?.addEventListener("click", () => {
+  const next = prefersDark() ? "light" : "dark";
+  document.documentElement.dataset.theme = next; store("nma.theme", next);
+  paintThemeButton();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeButton);
+paintThemeButton();
