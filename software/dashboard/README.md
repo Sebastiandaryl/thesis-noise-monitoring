@@ -26,6 +26,29 @@ From another device on the same network, use the Pi's address, for example `http
 
 If you open the HTML files directly (double-click) or in the preview, there is no server. The staff page then runs in **demo mode**: sign in as `admin` / `admin123` or `planner` / `planner123`, and changes are saved only in that browser. Demo accounts never work when the pages are served by `server.py`.
 
+## Put it online for free (PythonAnywhere)
+
+This gives a fixed address like `https://yourname.pythonanywhere.com` that stays online without a computer of yours running. The Pi sends its readings there over the internet.
+
+1. Sign up for a free **Beginner** account at pythonanywhere.com. Your username becomes the address, so pick something like `manilanoise`.
+2. Open **Consoles → Bash** and run:
+   ```bash
+   git clone https://github.com/Sebastiandaryl/thesis-noise-monitoring.git
+   python3 thesis-noise-monitoring/software/dashboard/server.py --add-user admin --role admin --name "Your Name"
+   ```
+3. Open the **Web** tab → **Add a new web app** → **Manual configuration** → the newest Python 3.
+4. On the web app's page, click the **WSGI configuration file** link, delete everything in it, paste this (with your username) and click **Save**:
+   ```python
+   import sys
+   sys.path.insert(0, "/home/YOURNAME/thesis-noise-monitoring/software/dashboard")
+   from wsgi import application
+   ```
+5. Click the green **Reload** button and open `https://YOURNAME.pythonanywhere.com`.
+
+Free web apps switch off after a month unless you log in and click **Run until 1 month from today** on the Web tab, so do that before the defense. To get code updates later: `cd thesis-noise-monitoring && git pull` in the Bash console, then **Reload**. Readings, accounts and notices are kept in `data/live/` on PythonAnywhere.
+
+`wsgi.py` runs the same code as `server.py`, so everything below works the same either way.
+
 ## Defense demo (no hardware needed)
 
 Open either page with `?demo` at the end of the address, for example `http://localhost:8000/admin.html?demo` or `index.html?demo` from a plain file. The browser then stays on sample readings, even if the server has real data, and every node reports a simulated GPS position. A **Demo preview** bar shows it's on. `?demo=off`, or the Exit demo button, turns it off.
@@ -179,7 +202,8 @@ software/dashboard/
 │   ├── core.css      colors, type and shared components (light and dark)
 │   ├── ph-basemap.js offline map of the Philippines (coastline and cities)
 │   └── leaflet.css   map library styles
-└── server.py         pages, staff accounts and API (Python standard library only)
+├── server.py         pages, staff accounts and API (Python standard library only)
+└── wsgi.py           the same server for WSGI hosts such as PythonAnywhere
 ```
 
 ## Things to replace before the defense
