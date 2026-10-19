@@ -31,9 +31,9 @@ If you open the HTML files directly (double-click) or in the preview, there is n
 This gives a fixed address like `https://yourname.pythonanywhere.com` that stays online without a computer of yours running. The Pi sends its readings there over the internet.
 
 1. Sign up for a free **Beginner** account at pythonanywhere.com. Your username becomes the address, so pick something like `manilanoise`.
-2. Open **Consoles → Bash** and run:
+2. The repository is private, so first make a GitHub token: GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate, with **read-only Contents** access to this repository. Then open **Consoles → Bash** on PythonAnywhere and run the lines below. When `git clone` asks for a password, paste the token.
    ```bash
-   git clone https://github.com/Sebastiandaryl/thesis-noise-monitoring.git
+   git clone https://YOUR-GITHUB-USERNAME@github.com/Sebastiandaryl/thesis-noise-monitoring.git
    python3 thesis-noise-monitoring/software/dashboard/server.py --add-user admin --role admin --name "Your Name"
    ```
 3. Open the **Web** tab → **Add a new web app** → **Manual configuration** → the newest Python 3.
