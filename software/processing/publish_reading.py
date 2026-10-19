@@ -41,7 +41,7 @@ import numpy as np
 # SETTINGS
 # =========================
 
-DASHBOARD_URL = "http://localhost:8000/api/readings"
+DASHBOARD_URL = "https://noisemonitoringsystem.pythonanywhere.com/api/readings"
 
 # Must match NMA_DEVICE_KEY on the server when the server sets one.
 DEVICE_KEY = os.environ.get("NMA_DEVICE_KEY", "")
