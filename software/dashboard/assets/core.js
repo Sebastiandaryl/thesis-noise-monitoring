@@ -24,19 +24,14 @@ const CONFIG = {
   TIMEZONE: "Asia/Manila",
 };
 
-// PLACEHOLDER sensor sites around DLSU Manila. Replace lat/lng with the
-// real deployment points once the nodes are installed. The id must match
-// the site_id the Raspberry Pi sends.
+// Sensor nodes. The id must match the site_id the Raspberry Pi sends
+// (noise_logger.py --site-id). N01 is the prototype logging at a residential
+// garage (position rounded to about 100 m); N02 is the defense room at DLSU.
+// base and mix only shape the simulated demo data (?demo); live readings
+// replace them.
 const DEFAULT_SITES = [
-  { id: "S01", name: "Taft Ave · DLSU Gate",        short: "Taft/DLSU",    setting: "Roadside",    profile: "roadside",    lat: 14.5647, lng: 120.9932, base: 72, mix: { vehicular: .62, commercial: .12, human: .14, ambient: .09, industrial: .03 } },
-  { id: "S02", name: "Vito Cruz LRT Station",       short: "Vito Cruz",    setting: "Transit hub", profile: "roadside",    lat: 14.5633, lng: 120.9951, base: 74, mix: { vehicular: .58, commercial: .16, human: .16, ambient: .06, industrial: .04 } },
-  { id: "S03", name: "San Andres Market",           short: "San Andres",   setting: "Market",      profile: "market",      lat: 14.5741, lng: 120.9967, base: 69, mix: { commercial: .48, human: .26, vehicular: .18, ambient: .06, industrial: .02 } },
-  { id: "S04", name: "Rizal Memorial Complex",      short: "Rizal Mem.",   setting: "Public space",profile: "park",        lat: 14.5617, lng: 120.9914, base: 58, mix: { human: .46, ambient: .26, vehicular: .18, commercial: .08, industrial: .02 } },
-  { id: "S05", name: "Manila Baywalk · Roxas Blvd", short: "Baywalk",      setting: "Public space",profile: "park",        lat: 14.5690, lng: 120.9826, base: 60, mix: { ambient: .38, vehicular: .30, human: .22, commercial: .08, industrial: .02 } },
-  { id: "S06", name: "Pandacan Industrial Area",    short: "Pandacan",     setting: "Industrial",  profile: "industrial",  lat: 14.5893, lng: 121.0002, base: 71, mix: { industrial: .56, vehicular: .22, ambient: .12, human: .06, commercial: .04 } },
-  { id: "S07", name: "Leveriza Residential, Malate",short: "Leveriza",     setting: "Residential", profile: "residential", lat: 14.5563, lng: 120.9968, base: 50, mix: { ambient: .44, human: .30, vehicular: .18, commercial: .06, industrial: .02 } },
-  { id: "S08", name: "St. Scholastica's College",   short: "St. Scho",     setting: "School",      profile: "school",      lat: 14.5594, lng: 120.9978, base: 54, mix: { human: .50, vehicular: .24, ambient: .18, commercial: .06, industrial: .02 } },
-  { id: "S09", name: "EDSA–Taft · Pasay Rotonda",   short: "EDSA–Taft",    setting: "Roadside",    profile: "roadside",    lat: 14.5376, lng: 121.0010, base: 77, mix: { vehicular: .70, commercial: .14, human: .10, industrial: .04, ambient: .02 } },
+  { id: "N01", name: "Residential village · Garage node", short: "Village",  setting: "Residential", profile: "residential", lat: 14.436, lng: 120.994, location: "fixed", base: 45, mix: { ambient: .60, industrial: .20, human: .10, vehicular: .08, commercial: .02 } },
+  { id: "N02", name: "DLSU Velasco Hall · Defense room", short: "DLSU",     setting: "School",      profile: "school",      lat: 14.5653, lng: 120.9929, location: "fixed", base: 52, mix: { human: .50, ambient: .25, vehicular: .15, commercial: .07, industrial: .03 } },
 ];
 
 // Working copy of the sites. Admin edits (from server.py or demo mode) are
