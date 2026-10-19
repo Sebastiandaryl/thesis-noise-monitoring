@@ -62,7 +62,7 @@ Scenarios are saved in the browser, so a public-page tab next to the staff tab s
 
 ## Maps
 
-Both maps have a Google-style **Map | Satellite** switch in the corner. *Map* uses CARTO Voyager, which looks closest to Google Maps, or a dark map in dark mode. *Satellite* is Esri World Imagery with street names on top. The staff page also offers light grey, dark, OpenStreetMap and an **offline map**.
+Both maps have a Google-style **Map | Satellite** switch in the corner. *Map* uses Esri World Street Map, which looks closest to Google Maps, or Esri's dark grey map in dark mode. *Satellite* is Esri World Imagery with place names on top. None of these need an API key, so they work on the hosted site too. The staff page also offers light grey, dark, OpenStreetMap and an **offline map**.
 
 The map covers the whole Philippines (and the rest of the world online). Nodes are placed by their GPS latitude and longitude, wherever they are. The globe button under the zoom buttons shows the whole country, and the square button zooms to all nodes.
 

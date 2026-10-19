@@ -631,15 +631,19 @@ function hourRanges(hours) {
 /* =====================================================================
    SHARED MAP
    ===================================================================== */
-// "streets" (CARTO Voyager) looks closest to Google Maps; "hybrid" is satellite with street names on top.
+// "streets" looks closest to Google Maps; "hybrid" is satellite with place names on top.
+// All Esri, which needs no API key (CARTO answers hosted sites with "API KEY REQUIRED" tiles).
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
 const TILE_SETS = {
-  streets: { url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap contributors © CARTO", max: 20 },
-  hybrid: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "Imagery © Esri · © OpenStreetMap contributors © CARTO", max: 19,
-            labels: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png" },
+  streets: { url: ESRI + "World_Street_Map/MapServer/tile/{z}/{y}/{x}", attr: "Map © Esri, HERE, Garmin, © OpenStreetMap contributors", max: 19 },
+  hybrid: { url: ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "Imagery © Esri, Maxar, Earthstar Geographics", max: 19,
+            labels: ESRI + "Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}" },
   osm:   { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", attr: "© OpenStreetMap contributors", max: 19 },
-  light: { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap contributors © CARTO", max: 20 },
-  dark:  { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attr: "© OpenStreetMap contributors © CARTO", max: 20 },
-  sat:   { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "Imagery © Esri", max: 19 },
+  light: { url: ESRI + "Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", attr: "Map © Esri, HERE, Garmin, © OpenStreetMap contributors", max: 16,
+           labels: ESRI + "Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}" },
+  dark:  { url: ESRI + "Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", attr: "Map © Esri, HERE, Garmin, © OpenStreetMap contributors", max: 16,
+           labels: ESRI + "Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}" },
+  sat:   { url: ESRI + "World_Imagery/MapServer/tile/{z}/{y}/{x}", attr: "Imagery © Esri, Maxar, Earthstar Geographics", max: 19 },
 };
 const prefersDark = () => document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
 
@@ -733,7 +737,7 @@ function createNoiseMap(elId, opts = {}) {
     if (k === "schematic") { schematic.addTo(map); showSketchDetail(); return; }
     map.removeLayer(schematic);
     const t = TILE_SETS[k]; let loaded = 0, errors = 0;
-    tileLayer = L.tileLayer(t.url, { attribution: t.attr, maxZoom: t.max, subdomains: "abcd", crossOrigin: true });
+    tileLayer = L.tileLayer(t.url, { attribution: t.attr, maxNativeZoom: t.max, maxZoom: 20, subdomains: "abc" });
     tileLayer.on("tileload", () => loaded++);
     tileLayer.on("tileerror", () => {
       errors++;
@@ -744,7 +748,7 @@ function createNoiseMap(elId, opts = {}) {
       }
     });
     tileLayer.addTo(map);
-    if (t.labels) labelLayer = L.tileLayer(t.labels, { maxZoom: t.max, subdomains: "abcd", crossOrigin: true }).addTo(map);
+    if (t.labels) labelLayer = L.tileLayer(t.labels, { maxNativeZoom: t.max, maxZoom: 20 }).addTo(map);
   }
 
   // Google-style "Map | Satellite" switch in the corner of the map.
