@@ -183,6 +183,10 @@
         </div>
       </div>
       <div class="area-sec">
+        <div class="eyebrow">What's making the noise right now</div>
+        <div class="probs wide" id="aMix"></div>
+      </div>
+      <div class="area-sec">
         <div class="eyebrow">Living here</div>
         <div class="grade">
           <div class="grade-letter" id="gLetter">–</div>
@@ -404,6 +408,13 @@ function renderArea(periods) {
   };
   setCheck($("cDay"), p.whoDay, CONFIG.WHO_DAY_DB, "Daytime average");
   setCheck($("cNight"), p.whoNight, CONFIG.WHO_NIGHT_DB, "Night average");
+
+  // Share of each sound source in the latest reading, as the classifier sees it
+  const probs = (!maint && state.latest[site.id]?.probs) || {};
+  const topCat = Object.entries(probs).sort((a, b) => b[1] - a[1])[0]?.[0];
+  $("aMix").innerHTML = Object.keys(probs).length
+    ? CATEGORIES.map(c => { const pc = (probs[c.id] ?? 0) * 100; return `<div class="prob ${c.id === topCat ? "top" : ""}"><span>${SOURCE_WORDS[c.id]}</span><span class="prob-track"><span class="prob-fill" style="width:${pc.toFixed(1)}%;background:var(${c.color})"></span></span><span class="mono">${pc.toFixed(0)}%</span></div>`; }).join("")
+    : `<span class="sub">No live reading</span>`;
 
   // Main source over the last 24 h
   const counts = {}; const h = state.history[site.id] || {}; const nowM = liveMinute();
