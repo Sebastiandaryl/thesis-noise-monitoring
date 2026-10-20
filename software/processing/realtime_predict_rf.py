@@ -1,3 +1,5 @@
+import argparse
+import time
 from pathlib import Path
 import librosa
 import numpy as np
@@ -5,6 +7,8 @@ import pandas as pd
 import joblib
 import sounddevice as sd
 import warnings
+
+from publish_reading import DASHBOARD_URL, compute_laeq, read_gps, send_reading
 
 warnings.filterwarnings("ignore")
 
@@ -108,11 +112,26 @@ def extract_features(y):
 # MAIN LOOP
 # =========================
 
+parser = argparse.ArgumentParser(description="Record, classify and (optionally) send readings to the GIS dashboard.")
+parser.add_argument("--site", help="node ID shown on the dashboard, e.g. S01. Without it nothing is sent.")
+parser.add_argument("--dashboard", default=DASHBOARD_URL, help="POST address of the dashboard (default: the PythonAnywhere site)")
+parser.add_argument("--continuous", action="store_true", help="keep recording without pressing ENTER (for running on boot)")
+parser.add_argument("--interval", type=float, default=0, help="extra seconds to wait between recordings in --continuous mode")
+parser.add_argument("--gps", action="store_true", help="read the GPS module and send the node's position")
+args = parser.parse_args()
+
 while True:
 
-    input("\nPress ENTER to record...")
+    if args.continuous:
+        if args.interval:
+            time.sleep(args.interval)
+    else:
+        input("\nPress ENTER to record...")
 
     audio = record_audio()
+
+    # Sound level from the raw audio, before extract_features normalizes it
+    laeq = compute_laeq(audio, TARGET_SR)
 
     features = extract_features(audio)
 
@@ -123,6 +142,7 @@ while True:
 
     print("\nPredicted class:", prediction)
     print("Confidence:", np.max(probabilities))
+    print(f"Level: {laeq:.1f} dB(A)")
 
     # ++++ optional ++++
  
@@ -134,3 +154,14 @@ while True:
     for i in top3_idx:
         print(f"{class_names[i]} : {probabilities[i]:.3f}")
     # ++++ optional ++++
+
+    if args.site:
+        ok = send_reading(
+            site_id=args.site,
+            laeq_db=laeq,
+            category=prediction,
+            probabilities=dict(zip(class_names, probabilities)),
+            gps=read_gps() if args.gps else None,
+            url=args.dashboard,
+        )
+        print("Sent to dashboard." if ok else "Not sent (dashboard unreachable).")
