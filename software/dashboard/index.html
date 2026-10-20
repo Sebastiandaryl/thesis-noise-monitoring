@@ -83,7 +83,7 @@
 .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .prose p { margin: 0; color: var(--ink-2); max-width: 70ch; }
 .prose { display: grid; gap: 10px; }
-.pin.grade span { font-family: var(--font-display); font-size: 15px; }
+.pin.graded span { font-family: var(--font-display); font-size: 15px; }
 .fc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .fc { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 3px; align-content: start; }
 .fc .eyebrow { font-size: 10.5px; }
@@ -359,9 +359,9 @@ function renderMapPub(periods) {
       NM.paintPin(site, p.Lden, { selected: site.id === state.selected });
       mk.getElement()?.querySelector(".pin")?.classList.remove("pred");
       const pin = mk.getElement()?.querySelector(".pin");
-      if (pin && g) { pin.style.background = g.color; pin.style.color = g.text; pin.querySelector("span").textContent = g.letter; pin.classList.add("grade"); pin.style.setProperty("--s", "34px"); }
+      if (pin && g) { pin.style.background = g.color; pin.style.color = g.text; pin.querySelector("span").textContent = g.letter; pin.classList.add("graded"); pin.style.setProperty("--s", "34px"); }
     }
-    if (pub.mapMode !== "grade") mk.getElement()?.querySelector(".pin")?.classList.remove("grade");
+    if (pub.mapMode !== "grade") mk.getElement()?.querySelector(".pin")?.classList.remove("graded");
     mk.setTooltipContent(`<div class="tip-name">${esc(site.name)}</div>
       ${muted ? `<div class="tip-row"><span>Sensor under ${site.status === "maintenance" ? "maintenance" : "repair"}</span></div>` : `<div class="tip-row"><span>Right now</span><b class="mono">${round1(v)} dB</b></div>
          <div class="tip-row"><span>Predicted in 15 min</span><b class="mono">${round1(f)} dB</b></div>`}
