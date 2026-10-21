@@ -245,6 +245,13 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DASHBOARD_DIR), **kwargs)
 
+    def end_headers(self):
+        # Pages and assets must be re-checked on every load: a browser that keeps an
+        # old core.js next to a new admin.html runs a mix of two versions.
+        if not self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     # ---- helpers ----
     def send_json(self, status, body, cookie=None, cors=False):
         data = json.dumps(body).encode("utf-8")
