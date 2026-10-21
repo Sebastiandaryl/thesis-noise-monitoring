@@ -101,8 +101,8 @@
         <span class="lbl">Dominant noise source</span>
         <div class="chips" id="catChips"></div>
         <div class="field">
-          <label for="minDb">Minimum level: <b class="mono" id="minDbVal">40 dB</b></label>
-          <input type="range" id="minDb" min="40" max="90" step="1" value="40">
+          <label for="minDb">Minimum level: <b class="mono" id="minDbVal">Any</b></label>
+          <input type="range" id="minDb" min="30" max="90" step="1" value="30">
         </div>
         <label class="toggle"><span>Only sites above WHO limit</span><input type="checkbox" id="onlyOver"><span class="switch"></span></label>
         <p class="note" id="filterNote"></p>
@@ -790,7 +790,8 @@ $("catChips").addEventListener("click", e => {
   const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", on);
   on ? state.filters.cats.add(b.dataset.cat) : state.filters.cats.delete(b.dataset.cat); renderAll();
 });
-$("minDb").addEventListener("input", e => { state.filters.minDb = +e.target.value; $("minDbVal").textContent = `${e.target.value} dB`; renderAll(); });
+// The far left of the slider means no minimum, so quiet night readings are never hidden by default.
+$("minDb").addEventListener("input", e => { const v = +e.target.value; state.filters.minDb = v <= 30 ? 0 : v; $("minDbVal").textContent = v <= 30 ? "Any" : `${v} dB`; renderAll(); });
 $("onlyOver").addEventListener("change", e => { state.filters.onlyOver = e.target.checked; renderAll(); });
 ["layerMarkers", "layerHeat", "layerZones"].forEach(id => $(id).addEventListener("change", renderAll));
 $("basemap").addEventListener("change", () => { store("nma.basemap", $("basemap").value); if ($("basemap").value !== "schematic") NM.resetFailure(); NM.setBasemap($("basemap").value); });

@@ -129,7 +129,7 @@ const state = {
   view: "measured",
   offset: 0,             // replay offset in minutes (0 = live)
   range: 60,
-  filters: { cats: new Set(CATEGORIES.map(c => c.id)), minDb: 40, onlyOver: false },
+  filters: { cats: new Set(CATEGORIES.map(c => c.id)), minDb: 0, onlyOver: false },
   sort: { key: "now", dir: -1 },
   mode: CONFIG.DATA_MODE,
   sourceError: null,
