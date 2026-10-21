@@ -60,10 +60,12 @@ const Hooks = { siteAdded() {}, siteMoved() {}, sitesChanged() {} };
 // "Not evaluated yet" instead of a number. Say how the test set was split:
 // scores on a random clip split can be far higher than with whole recordings
 // held out, because clips from the same recording end up in training and testing.
+// Thesis results (Table 6.3): leave-one-site-out over 28 sites, 1,632 field clips, macro averages.
 const MODEL_RESULTS = [
-  { name: "Random Forest (current prototype)", split: "", accuracy: null, precision: null, recall: null, f1: null },
-  { name: "Baseline CNN",                      split: "", accuracy: null, precision: null, recall: null, f1: null },
-  { name: "Chaos-enhanced CNN",                split: "", accuracy: null, precision: null, recall: null, f1: null },
+  { name: "Random Forest (handcrafted features)",  split: "Leave-one-site-out, 28 sites", accuracy: 0.801, precision: 0.770, recall: 0.777, f1: 0.772 },
+  { name: "SVM (handcrafted features)",            split: "Leave-one-site-out, 28 sites", accuracy: 0.862, precision: 0.837, recall: 0.848, f1: 0.840 },
+  { name: "YAMNet CNN + logistic regression",      split: "Leave-one-site-out, 28 sites", accuracy: 0.858, precision: 0.841, recall: 0.849, f1: 0.842 },
+  { name: "Ensemble: SVM + YAMNet (used live)",    split: "Leave-one-site-out, 28 sites", accuracy: 0.879, precision: 0.862, recall: 0.871, f1: 0.864 },
 ];
 
 /* =====================================================================
