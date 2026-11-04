@@ -1,0 +1,5 @@
+model,acc_without,acc_with,macro_f1_without,macro_f1_with,sites_better,sites_worse,sites_same,wilcoxon_W,wilcoxon_p,recall_ambient_without,recall_ambient_with,recall_commercial_without,recall_commercial_with,recall_human_without,recall_human_with,recall_industrial_without,recall_industrial_with,recall_vehicular_without,recall_vehicular_with
+rf,0.8015,0.8039,0.7723,0.7744,8,7,13,56.0,0.8203,0.9623,0.9659,0.549,0.5529,0.8527,0.8499,0.6083,0.6115,0.915,0.9216
+svm,0.8621,0.8646,0.8402,0.8438,4,1,23,1.0,0.0796,0.982,0.982,0.7137,0.7137,0.8584,0.8584,0.7293,0.742,0.9542,0.9542
+yamnet,0.8578,0.8585,0.842,0.8427,2,1,25,1.0,0.285,0.9623,0.9623,0.749,0.749,0.847,0.847,0.7197,0.7229,0.9673,0.9673
+ensemble,0.8787,0.8811,0.8643,0.8672,2,1,25,2.0,0.593,0.9767,0.9767,0.7922,0.8078,0.8499,0.8499,0.758,0.758,0.9804,0.9804

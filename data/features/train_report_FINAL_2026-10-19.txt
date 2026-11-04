@@ -1,0 +1,285 @@
+
+Loading features...
+Dataset size: 1632 samples
+Feature count: 199 handcrafted + 2569 YAMNet
+
+Clips per site:
+ambient/morning_dew               183
+ambient/quiet_residential           8
+ambient/quiet_testing               1
+ambient/quiet_village_night       127
+ambient/rooftopnight              238
+commercial/baclaran_alley         164
+commercial/baclaran_palengke       31
+commercial/dlsu_cads               55
+commercial/street_vendors           5
+human/class-disc                   60
+human/discussion                  120
+human/friends_talk                120
+human/lab_room                      5
+human/miguel_rowd_conversation     48
+industrial/aircon                  39
+industrial/aircon2                 27
+industrial/construction_site       17
+industrial/dlsu_machinery          37
+industrial/dlsu_superfan            8
+industrial/egi_taft                25
+industrial/egi_taft_renovation     52
+industrial/fan                     21
+industrial/grinderfri               9
+industrial/hammering_grinding      79
+vehicular/dlsu_roadside            10
+vehicular/gil_puyat                60
+vehicular/green_rushour            23
+vehicular/vito_cruz                60
+
+[reference only] Random clip-level split accuracy (RF): 0.969 (inflated by near-duplicate clips from the same session)
+
+==================== RF ====================
+Running leave-one-site-out evaluation...
+
+RF leave-one-site-out accuracy: 0.801  (balanced: 0.777)
+
+Classification Report:
+              precision    recall  f1-score   support
+
+     ambient       0.93      0.96      0.95       557
+  commercial       0.56      0.55      0.55       255
+       human       0.82      0.85      0.83       353
+  industrial       0.71      0.61      0.65       314
+   vehicular       0.83      0.92      0.87       153
+
+    accuracy                           0.80      1632
+   macro avg       0.77      0.78      0.77      1632
+weighted avg       0.80      0.80      0.80      1632
+
+
+Confusion Matrix (rows = true, cols = predicted):
+            ambient  commercial  human  industrial  vehicular
+ambient         536           0      4          17          0
+commercial        0         140     59          53          3
+human             3          48    301           1          0
+industrial       35          58      5         191         25
+vehicular         0           5      0           8        140
+
+Per-site accuracy when that site is unseen:
+                                clips  accuracy most_predicted
+site                                                          
+ambient/morning_dew               183      0.91        ambient
+ambient/quiet_residential           8      0.88        ambient
+ambient/quiet_testing               1      1.00        ambient
+ambient/quiet_village_night       127      1.00        ambient
+ambient/rooftopnight              238      0.98        ambient
+commercial/baclaran_alley         164      0.41     commercial
+commercial/baclaran_palengke       31      0.97     commercial
+commercial/dlsu_cads               55      0.69     commercial
+commercial/street_vendors           5      0.80     commercial
+human/class-disc                   60      1.00          human
+human/discussion                  120      0.98          human
+human/friends_talk                120      0.98          human
+human/lab_room                      5      1.00          human
+human/miguel_rowd_conversation     48      0.00     commercial
+industrial/aircon                  39      0.97     industrial
+industrial/aircon2                 27      1.00     industrial
+industrial/construction_site       17      0.29      vehicular
+industrial/dlsu_machinery          37      0.92     industrial
+industrial/dlsu_superfan            8      0.12      vehicular
+industrial/egi_taft                25      0.68     industrial
+industrial/egi_taft_renovation     52      0.37     commercial
+industrial/fan                     21      1.00     industrial
+industrial/grinderfri               9      1.00     industrial
+industrial/hammering_grinding      79      0.25        ambient
+vehicular/dlsu_roadside            10      0.70      vehicular
+vehicular/gil_puyat                60      0.98      vehicular
+vehicular/green_rushour            23      0.96      vehicular
+vehicular/vito_cruz                60      0.87      vehicular
+
+Model trained on all data and saved to: /home/aidrivennoise/thesis/data/features/rf_model.joblib
+
+==================== SVM ====================
+Running leave-one-site-out evaluation...
+
+SVM leave-one-site-out accuracy: 0.862  (balanced: 0.848)
+
+Classification Report:
+              precision    recall  f1-score   support
+
+     ambient       0.95      0.98      0.96       557
+  commercial       0.71      0.71      0.71       255
+       human       0.89      0.86      0.88       353
+  industrial       0.82      0.73      0.77       314
+   vehicular       0.81      0.95      0.88       153
+
+    accuracy                           0.86      1632
+   macro avg       0.84      0.85      0.84      1632
+weighted avg       0.86      0.86      0.86      1632
+
+
+Confusion Matrix (rows = true, cols = predicted):
+            ambient  commercial  human  industrial  vehicular
+ambient         547           1      1           8          0
+commercial        0         182     33          36          4
+human             2          46    303           2          0
+industrial       29          26      0         229         30
+vehicular         0           2      2           3        146
+
+Per-site accuracy when that site is unseen:
+                                clips  accuracy most_predicted
+site                                                          
+ambient/morning_dew               183      0.96        ambient
+ambient/quiet_residential           8      0.75        ambient
+ambient/quiet_testing               1      1.00        ambient
+ambient/quiet_village_night       127      1.00        ambient
+ambient/rooftopnight              238      1.00        ambient
+commercial/baclaran_alley         164      0.70     commercial
+commercial/baclaran_palengke       31      1.00     commercial
+commercial/dlsu_cads               55      0.62     commercial
+commercial/street_vendors           5      0.60     commercial
+human/class-disc                   60      1.00          human
+human/discussion                  120      1.00          human
+human/friends_talk                120      0.98          human
+human/lab_room                      5      1.00          human
+human/miguel_rowd_conversation     48      0.00     commercial
+industrial/aircon                  39      0.97     industrial
+industrial/aircon2                 27      1.00     industrial
+industrial/construction_site       17      0.06      vehicular
+industrial/dlsu_machinery          37      1.00     industrial
+industrial/dlsu_superfan            8      0.12      vehicular
+industrial/egi_taft                25      0.72     industrial
+industrial/egi_taft_renovation     52      0.92     industrial
+industrial/fan                     21      1.00     industrial
+industrial/grinderfri               9      1.00     industrial
+industrial/hammering_grinding      79      0.37        ambient
+vehicular/dlsu_roadside            10      0.80      vehicular
+vehicular/gil_puyat                60      0.98      vehicular
+vehicular/green_rushour            23      1.00      vehicular
+vehicular/vito_cruz                60      0.93      vehicular
+
+Model trained on all data and saved to: /home/aidrivennoise/thesis/data/features/svm_model.joblib
+
+==================== YAMNET ====================
+Running leave-one-site-out evaluation...
+
+YAMNET leave-one-site-out accuracy: 0.858  (balanced: 0.849)
+
+Classification Report:
+              precision    recall  f1-score   support
+
+     ambient       0.92      0.96      0.94       557
+  commercial       0.70      0.75      0.73       255
+       human       0.86      0.85      0.85       353
+  industrial       0.89      0.72      0.80       314
+   vehicular       0.83      0.97      0.89       153
+
+    accuracy                           0.86      1632
+   macro avg       0.84      0.85      0.84      1632
+weighted avg       0.86      0.86      0.86      1632
+
+
+Confusion Matrix (rows = true, cols = predicted):
+            ambient  commercial  human  industrial  vehicular
+ambient         536           1      2          12          6
+commercial        1         191     43          12          8
+human             1          52    299           1          0
+industrial       43          26      2         226         17
+vehicular         0           1      1           3        148
+
+Per-site accuracy when that site is unseen:
+                                clips  accuracy most_predicted
+site                                                          
+ambient/morning_dew               183      0.96        ambient
+ambient/quiet_residential           8      0.12     industrial
+ambient/quiet_testing               1      1.00        ambient
+ambient/quiet_village_night       127      1.00        ambient
+ambient/rooftopnight              238      0.97        ambient
+commercial/baclaran_alley         164      0.70     commercial
+commercial/baclaran_palengke       31      0.97     commercial
+commercial/dlsu_cads               55      0.78     commercial
+commercial/street_vendors           5      0.80     commercial
+human/class-disc                   60      0.98          human
+human/discussion                  120      0.99          human
+human/friends_talk                120      0.99          human
+human/lab_room                      5      0.40     commercial
+human/miguel_rowd_conversation     48      0.00     commercial
+industrial/aircon                  39      1.00     industrial
+industrial/aircon2                 27      0.96     industrial
+industrial/construction_site       17      0.29      vehicular
+industrial/dlsu_machinery          37      1.00     industrial
+industrial/dlsu_superfan            8      1.00     industrial
+industrial/egi_taft                25      0.68     industrial
+industrial/egi_taft_renovation     52      0.90     industrial
+industrial/fan                     21      1.00     industrial
+industrial/grinderfri               9      1.00     industrial
+industrial/hammering_grinding      79      0.22        ambient
+vehicular/dlsu_roadside            10      1.00      vehicular
+vehicular/gil_puyat                60      0.98      vehicular
+vehicular/green_rushour            23      0.87      vehicular
+vehicular/vito_cruz                60      0.98      vehicular
+
+Model trained on all data and saved to: /home/aidrivennoise/thesis/data/features/yamnet_model.joblib
+
+==================== ENSEMBLE (SVM + YAMNET) ====================
+
+ENSEMBLE leave-one-site-out accuracy: 0.879  (balanced: 0.871)
+
+Classification Report:
+              precision    recall  f1-score   support
+
+     ambient       0.93      0.98      0.95       557
+  commercial       0.75      0.79      0.77       255
+       human       0.91      0.85      0.88       353
+  industrial       0.89      0.76      0.82       314
+   vehicular       0.84      0.98      0.90       153
+
+    accuracy                           0.88      1632
+   macro avg       0.86      0.87      0.86      1632
+weighted avg       0.88      0.88      0.88      1632
+
+
+Confusion Matrix (rows = true, cols = predicted):
+            ambient  commercial  human  industrial  vehicular
+ambient         544           1      2           6          4
+commercial        0         202     26          21          6
+human             1          51    300           1          0
+industrial       39          17      1         238         19
+vehicular         0           0      1           2        150
+
+Per-site accuracy when that site is unseen:
+                                clips  accuracy most_predicted
+site                                                          
+ambient/morning_dew               183      0.97        ambient
+ambient/quiet_residential           8      0.50        ambient
+ambient/quiet_testing               1      1.00        ambient
+ambient/quiet_village_night       127      1.00        ambient
+ambient/rooftopnight              238      0.98        ambient
+commercial/baclaran_alley         164      0.74     commercial
+commercial/baclaran_palengke       31      1.00     commercial
+commercial/dlsu_cads               55      0.82     commercial
+commercial/street_vendors           5      0.80     commercial
+human/class-disc                   60      0.98          human
+human/discussion                  120      0.99          human
+human/friends_talk                120      0.99          human
+human/lab_room                      5      0.60          human
+human/miguel_rowd_conversation     48      0.00     commercial
+industrial/aircon                  39      1.00     industrial
+industrial/aircon2                 27      0.96     industrial
+industrial/construction_site       17      0.18      vehicular
+industrial/dlsu_machinery          37      1.00     industrial
+industrial/dlsu_superfan            8      0.88     industrial
+industrial/egi_taft                25      0.72     industrial
+industrial/egi_taft_renovation     52      0.96     industrial
+industrial/fan                     21      1.00     industrial
+industrial/grinderfri               9      1.00     industrial
+industrial/hammering_grinding      79      0.35        ambient
+vehicular/dlsu_roadside            10      1.00      vehicular
+vehicular/gil_puyat                60      0.98      vehicular
+vehicular/green_rushour            23      0.96      vehicular
+vehicular/vito_cruz                60      0.98      vehicular
+
+Ensemble definition saved to: /home/aidrivennoise/thesis/data/features/ensemble_model.joblib (uses the member model files)
+
+==================== SUMMARY (leave-one-site-out) ====================
+RF        accuracy 0.801  balanced 0.777
+SVM       accuracy 0.862  balanced 0.848
+YAMNET    accuracy 0.858  balanced 0.849
+ENSEMBLE  accuracy 0.879  balanced 0.871   <- used by realtime_predict_rf.py

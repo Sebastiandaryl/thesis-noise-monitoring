@@ -1,0 +1,4 @@
+method,mae_db,within_3db_pct,bias_db,max_error_db
+persistence,4.49,51.72,-0.0,23.4
+moving_average,5.0,40.0,2.68,20.23
+linear_model,3.5,66.21,-3.16,24.46

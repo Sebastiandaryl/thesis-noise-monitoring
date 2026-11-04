@@ -1,0 +1,5 @@
+model,accuracy,balanced_accuracy,macro_precision,macro_recall,macro_f1,roc_auc_macro_ovr
+Random Forest,0.801,0.777,0.77,0.777,0.772,0.946
+SVM,0.862,0.848,0.837,0.848,0.84,0.962
+YAMNet CNN + LR,0.858,0.849,0.841,0.849,0.842,0.956
+Ensemble (SVM + YAMNet),0.879,0.871,0.862,0.871,0.864,0.971

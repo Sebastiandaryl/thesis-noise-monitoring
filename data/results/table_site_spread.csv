@@ -1,0 +1,4 @@
+,Random Forest,SVM,YAMNet CNN + LR,Ensemble (SVM + YAMNet)
+mean_site_acc,0.775,0.803,0.805,0.834
+sd_site_acc,0.307,0.308,0.304,0.27
+median_site_acc,0.94,0.975,0.97,0.975

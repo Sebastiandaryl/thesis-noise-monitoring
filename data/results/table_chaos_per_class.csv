@@ -1,0 +1,8 @@
+,lle,lle,corr_dim,corr_dim,higuchi_fd,higuchi_fd
+,mean,std,mean,std,mean,std
+label,,,,,,
+ambient,0.039,0.006,1.737,0.334,1.463,0.139
+commercial,0.036,0.006,2.398,0.225,1.541,0.126
+human,0.031,0.005,2.265,0.324,1.51,0.135
+industrial,0.032,0.005,2.191,0.384,1.68,0.149
+vehicular,0.047,0.006,2.709,0.046,1.503,0.16

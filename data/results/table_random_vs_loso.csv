@@ -1,0 +1,3 @@
+model,random_split_accuracy,random_split_macro_f1,loso_accuracy
+Random Forest,0.969,0.96,0.801
+SVM,0.982,0.978,0.862

@@ -1,0 +1,12 @@
+{
+  "readings": 392,
+  "start": "2026-10-20 01:35:00",
+  "end": "2026-10-20 08:04:00",
+  "hours": 6.5,
+  "forecasts_train": 216,
+  "forecasts_test": 145,
+  "test_start": "2026-10-20 05:25:00",
+  "level_min": 41.8,
+  "level_max": 67.7,
+  "level_mean": 49.1
+}

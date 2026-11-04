@@ -1,0 +1,6 @@
+,ambient,commercial,human,industrial,vehicular
+ambient,536,1,2,12,6
+commercial,1,191,43,12,8
+human,1,52,299,1,0
+industrial,43,26,2,226,17
+vehicular,0,1,1,3,148
