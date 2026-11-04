@@ -1,0 +1,10 @@
+ai-edge-litert==2.3.0
+joblib==1.5.3
+librosa==0.11.0
+matplotlib==3.11.2
+nolds==0.5.2
+numpy==2.3.5
+pandas==3.0.0
+scikit-learn==1.8.0
+scipy==1.17.0
+soundfile==0.13.1
