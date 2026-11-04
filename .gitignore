@@ -208,3 +208,15 @@ __marimo__/
 
 # Dashboard live readings (written by software/dashboard/server.py)
 data/live/
+
+# Thesis data that must stay off GitHub
+*.wav
+data/live_clips/
+data/excluded/
+data/review/
+data/audit/
+*.jpeg
+*.jpg
+*.jfif
+*.pdf
+*.bak
