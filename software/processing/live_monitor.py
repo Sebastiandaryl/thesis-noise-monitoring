@@ -14,6 +14,15 @@ near the mic's self-noise floor (~33 dB(A)) peak normalization turns a faint
 room hum into a steady drone that the model reads as industrial. Each reading takes about 1 s
 to process on a Raspberry Pi 4, so a new reading arrives every 5 s.
 
+Forecast: each reading carries the energy mean of the last 15 minutes of levels, the
+same moving-average forecast as noise_logger.py (a shorter window until the node has
+run for 15 minutes, none in the first minute).
+
+Chaos: the Lyapunov exponent, D2 and Higuchi Df of the newest clip are computed in a
+separate process with the settings of the offline analysis, for the staff dashboard
+only. They do not feed the classifier and never hold up a reading; each reading
+carries the latest finished result. --no-chaos turns this off, and trials never use it.
+
 GPS: read from gpsd (the NEO-6M on /dev/serial0). Readings carry gps_fix and,
 when there is a fix, lat/lng; the dashboard moves a node whose location is set
 to GPS and keeps it at its saved position when there is no fix. Indoors the
@@ -23,8 +32,10 @@ NEO-6M often has no fix; give it a view of the sky for a few minutes first.
 from pathlib import Path
 from datetime import datetime
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import json
 import queue
+import signal
 import socket
 import subprocess
 import threading
@@ -39,7 +50,8 @@ import soundfile as sf
 
 from extract_features import extract_features   # same features as training
 from extract_yamnet import yamnet_features
-from noise_logger import compute_laeq, load_model, DEVICE, WARMUP_SECONDS, QUIET_DB
+from extract_chaos import chaos_from_audio       # same chaos settings as the offline analysis
+from noise_logger import compute_laeq, load_model, energy_mean, DEVICE, WARMUP_SECONDS, QUIET_DB
 
 warnings.filterwarnings("ignore")
 
@@ -93,6 +105,33 @@ class GpsReader(threading.Thread):
         return None
 
 
+FORECAST_MINUTES = 15
+
+
+def ignore_ctrl_c():
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+class ChaosWorker:
+    """Computes the chaos metrics of the newest clip in a separate process, on another
+    of the Pi's cores. Clips that arrive while it is busy are skipped for chaos only."""
+
+    def __init__(self):
+        self.pool = ProcessPoolExecutor(max_workers=1, initializer=ignore_ctrl_c)
+        self.job = self.pool.submit(int)            # start the process before any thread exists
+        self.latest = {}
+
+    def submit(self, y):
+        try:
+            if self.job is not None and self.job.done():
+                job, self.job = self.job, None
+                self.latest = job.result() or self.latest
+            if self.job is None:
+                self.job = self.pool.submit(chaos_from_audio, y, SR)
+        except Exception as e:                      # readings carry on without chaos
+            print(f"          chaos skipped: {e}")
+
+
 def post_reading(url, reading, timeout=10):
     headers = {"Content-Type": "application/json"}
     if os.environ.get("NMA_DEVICE_KEY"):
@@ -118,15 +157,18 @@ def main():
                     help="trial condition written to the trials CSV and clip names, e.g. hood or nohood")
     ap.add_argument("--quiet-db", type=float, default=QUIET_DB,
                     help="clips below this dB(A) are labelled ambient without the model (0 = off)")
+    ap.add_argument("--no-chaos", action="store_true", help="do not compute the chaos metrics")
     ap.add_argument("--gps-decimals", type=int, default=6,
                     help="decimals of lat/lng sent to the dashboard (3 = about 100 m, for testing at home)")
     args = ap.parse_args()
     args.setup = "".join(ch for ch in args.setup if ch.isalnum() or ch in "-_")
 
+    chaos = None if args.no_chaos or args.trial else ChaosWorker()
     print("Loading model...")
     members, class_names = load_model()
     gps = GpsReader()
     gps.start()
+    recent = []                                     # (time, laeq) of the last FORECAST_MINUTES
     args.save = args.save or bool(args.trial)
     if args.trial and not TRIALS_CSV.exists():
         TRIALS_CSV.write_text("time,setup,expected,predicted,confidence,laeq_db,clip\n")
@@ -187,18 +229,28 @@ def main():
                 row = pd.DataFrame([feats])
                 p = np.mean([m.predict_proba(row[m.feature_names_in_])[0] for m in members], axis=0)
             category = str(class_names[np.argmax(p)])
+            if chaos:
+                chaos.submit(y)
+            # 15-minute forecast, as in noise_logger.py: energy mean of the last 15 minutes
+            recent.append((t_end, laeq))
+            recent = [(t, v) for t, v in recent if (t_end - t).total_seconds() <= FORECAST_MINUTES * 60]
+            span = (t_end - recent[0][0]).total_seconds()
+            predicted = round(energy_mean([v for _, v in recent]), 1) if span >= 60 else None
+            metrics = chaos.latest if chaos else {}
             fix = gps.fix()
             reading = {"site_id": args.site_id, "timestamp": t_end.isoformat(timespec="seconds"),
                        "laeq_db": round(laeq, 1), "category": category,
                        "probabilities": {str(c): round(float(v), 3) for c, v in zip(class_names, p)},
-                       "gps_fix": fix is not None}
+                       "predicted_db": predicted, "gps_fix": fix is not None, **metrics}
             if fix:
                 reading["lat"], reading["lng"] = round(fix[0], args.gps_decimals), round(fix[1], args.gps_decimals)
             if args.url:
                 sender.put(reading)
             where = f"{fix[0]:.5f}, {fix[1]:.5f}" if fix else gps.status
             print(f"{t_end:%H:%M:%S}  {laeq:5.1f} dB(A)  {category:10s} ({'quiet' if quiet else f'{p.max():.2f}'})  GPS: {where}  "
-                  f"[{time.time() - t0:.1f} s]")
+                  f"[{time.time() - t0:.1f} s]"
+                  + (f"  +15 min: {predicted:.1f}" if predicted is not None else "")
+                  + (f"  lambda {metrics['lle']:.3f}  D2 {metrics['corr_dim']:.2f}  Df {metrics['fractal_dim']:.2f}" if metrics else ""))
             if args.trial:
                 with open(TRIALS_CSV, "a") as fh:
                     fh.write(f"{t_end.isoformat(timespec='seconds')},{args.setup},{args.trial},{category},"
@@ -211,6 +263,8 @@ def main():
         pass
     finally:
         rec.terminate()
+        if chaos:
+            chaos.pool.shutdown(wait=False, cancel_futures=True)
 
 
 if __name__ == "__main__":
