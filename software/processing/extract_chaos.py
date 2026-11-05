@@ -125,31 +125,6 @@ def chaos_features(path, m, tau):
     }
 
 
-_LIVE_PARAMS = None
-
-
-def chaos_from_audio(y, sr):
-    """Chaos metrics of a live clip already in memory, with the same window, tau and m
-    as training (chaos_params.json). Returns the dashboard's field names, or None for silence."""
-    global _LIVE_PARAMS
-    if _LIVE_PARAMS is None:
-        p = json.loads(PARAMS_JSON.read_text()) if PARAMS_JSON.exists() else {}
-        _LIVE_PARAMS = (int(p.get("m", 3)), int(p.get("tau", 15)))
-    m, tau = _LIVE_PARAMS
-    y = librosa.resample(np.asarray(y, dtype=float), orig_sr=sr, target_sr=SR)
-    mid = len(y) // 2
-    x = y[max(0, mid - WINDOW // 2): max(0, mid - WINDOW // 2) + WINDOW]
-    sd = x.std()
-    if len(x) < WINDOW or sd == 0:
-        return None
-    x = (x - x.mean()) / sd
-    return {
-        "lle": round(float(nolds.lyap_r(x, emb_dim=m, lag=tau, min_tsep=THEILER, trajectory_len=LLE_TRAJ, fit="poly")), 4),
-        "corr_dim": round(correlation_dimension(x, m, tau), 3),
-        "fractal_dim": round(higuchi_fd(x), 3),
-    }
-
-
 def all_clips():
     return [(c, p) for c in CLASSES for p in sorted((DATASET_DIR / c).rglob("*.wav"))]
 

@@ -180,7 +180,7 @@
             <div class="stat"><b id="pD2">--</b><span>Corr. dim D₂</span></div>
             <div class="stat"><b id="pDf">--</b><span>Fractal dim Df</span></div>
           </div>
-          <p class="note">λ &gt; 0 means nearby noise states diverge (chaotic). Higher D₂ and Df mean a more complex, less predictable soundscape.</p>
+          <p class="note">λ &gt; 0 means nearby noise states diverge (chaotic). Higher D₂ and Df mean a more complex, less predictable soundscape. Chaos measures are computed in the offline analysis only; the live node skips them to keep each reading at about 1 s.</p>
           <div class="row"><button class="btn" id="zoomSite" type="button">Zoom to site</button></div>
         </div>
       </div>
@@ -649,7 +649,7 @@ function renderPanel(st) {
   $("pD2").textContent = st.d2 != null ? st.d2.toFixed(2) : "--";
   $("pDf").textContent = st.df != null ? st.df.toFixed(2) : "--";
   const cs = $("pChaosState");
-  if (st.lle == null) { cs.className = "status"; cs.textContent = "No data"; }
+  if (st.lle == null) { cs.className = "status"; cs.textContent = "Offline only"; }
   else if (st.lle > 0) { cs.className = "status warn"; cs.innerHTML = `${ICON.warn}Chaotic (λ &gt; 0)`; }
   else { cs.className = "status ok"; cs.innerHTML = `${ICON.ok}Stable (λ ≤ 0)`; }
 }
