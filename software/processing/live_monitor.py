@@ -40,6 +40,7 @@ import soundfile as sf
 from extract_features import extract_features   # same features as training
 from extract_yamnet import yamnet_features
 from noise_logger import compute_laeq, load_model, energy_mean, DEVICE, WARMUP_SECONDS, QUIET_DB
+from extract_chaos import chaos_from_audio       # same chaos settings as training
 
 warnings.filterwarnings("ignore")
 
@@ -93,6 +94,29 @@ class GpsReader(threading.Thread):
         return None
 
 
+class ChaosWorker:
+    """Computes the chaos metrics (Lyapunov, D2, Higuchi Df) of the newest clip in a
+    separate process, so it runs on another of the Pi 4's cores and never holds up a
+    reading. Each reading carries the most recent finished result; clips that arrive
+    while it is still busy are skipped for chaos (they are still classified and sent)."""
+
+    def __init__(self):
+        from concurrent.futures import ProcessPoolExecutor
+        self.pool = ProcessPoolExecutor(max_workers=1)
+        self.job = None
+        self.latest = {}
+
+    def submit(self, y):
+        if self.job is not None and self.job.done():
+            try:
+                self.latest = self.job.result() or self.latest
+            except Exception as e:                      # keep sending readings without chaos
+                print(f"[chaos] skipped: {e}")
+            self.job = None
+        if self.job is None:
+            self.job = self.pool.submit(chaos_from_audio, y, SR)
+
+
 FORECAST_MINUTES = 15
 
 
@@ -130,6 +154,7 @@ def main():
     members, class_names = load_model()
     gps = GpsReader()
     gps.start()
+    chaos = ChaosWorker()
     recent = []                                     # (time, laeq) of the last FORECAST_MINUTES
     args.save = args.save or bool(args.trial)
     if args.trial and not TRIALS_CSV.exists():
@@ -191,6 +216,7 @@ def main():
                 row = pd.DataFrame([feats])
                 p = np.mean([m.predict_proba(row[m.feature_names_in_])[0] for m in members], axis=0)
             category = str(class_names[np.argmax(p)])
+            chaos.submit(y)
             # 15-minute forecast, as in noise_logger.py: energy mean of the last 15 minutes
             # (a shorter window until the node has run for 15 minutes; none in the first minute)
             recent.append((t_end, laeq))
@@ -201,7 +227,7 @@ def main():
             reading = {"site_id": args.site_id, "timestamp": t_end.isoformat(timespec="seconds"),
                        "laeq_db": round(laeq, 1), "category": category,
                        "probabilities": {str(c): round(float(v), 3) for c, v in zip(class_names, p)},
-                       "predicted_db": predicted, "gps_fix": fix is not None}
+                       "predicted_db": predicted, "gps_fix": fix is not None, **chaos.latest}
             if fix:
                 reading["lat"], reading["lng"] = round(fix[0], args.gps_decimals), round(fix[1], args.gps_decimals)
             if args.url:
