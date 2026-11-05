@@ -94,31 +94,27 @@ class GpsReader(threading.Thread):
         return None
 
 
-class ChaosWorker(threading.Thread):
-    """Computes the chaos metrics (Lyapunov, D2, Higuchi Df) of the newest clip in the
-    background. They take a few seconds on a Pi 4, longer than one 5 s clip, so each
-    reading carries the most recent result instead of holding up the readings."""
+class ChaosWorker:
+    """Computes the chaos metrics (Lyapunov, D2, Higuchi Df) of the newest clip in a
+    separate process, so it runs on another of the Pi 4's cores and never holds up a
+    reading. Each reading carries the most recent finished result; clips that arrive
+    while it is still busy are skipped for chaos (they are still classified and sent)."""
 
     def __init__(self):
-        super().__init__(daemon=True)
-        self.jobs = queue.Queue(maxsize=1)
+        from concurrent.futures import ProcessPoolExecutor
+        self.pool = ProcessPoolExecutor(max_workers=1)
+        self.job = None
         self.latest = {}
 
     def submit(self, y):
-        try:
-            self.jobs.put_nowait(y)
-        except queue.Full:                              # still busy: skip this clip
-            pass
-
-    def run(self):
-        while True:
-            y = self.jobs.get()
+        if self.job is not None and self.job.done():
             try:
-                result = chaos_from_audio(y, SR)
-                if result:
-                    self.latest = result
+                self.latest = self.job.result() or self.latest
             except Exception as e:                      # keep sending readings without chaos
                 print(f"[chaos] skipped: {e}")
+            self.job = None
+        if self.job is None:
+            self.job = self.pool.submit(chaos_from_audio, y, SR)
 
 
 FORECAST_MINUTES = 15
@@ -159,7 +155,6 @@ def main():
     gps = GpsReader()
     gps.start()
     chaos = ChaosWorker()
-    chaos.start()
     recent = []                                     # (time, laeq) of the last FORECAST_MINUTES
     args.save = args.save or bool(args.trial)
     if args.trial and not TRIALS_CSV.exists():
