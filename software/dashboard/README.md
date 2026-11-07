@@ -49,6 +49,10 @@ Free web apps switch off after a month unless you log in and click **Run until 1
 
 `wsgi.py` runs the same code as `server.py`, so everything below works the same either way.
 
+## Phone and laptop nodes
+
+Any phone or laptop can be a sensor node with its own microphone: open `/node.html`, calibrate against the Pi, and press Start. A classifier hub (`software/processing/node_hub.py`, on the Pi or a laptop) classifies their clips with the same model as the Pi. Step-by-step guide: [NODES.md](NODES.md).
+
 ## Defense demo (no hardware needed)
 
 Open either page with `?demo` at the end of the address, for example `http://localhost:8000/admin.html?demo` or `index.html?demo` from a plain file. The browser then stays on sample readings, even if the server has real data, and every node reports a simulated GPS position. A **Demo preview** bar shows it's on. `?demo=off`, or the Exit demo button, turns it off.
@@ -196,6 +200,7 @@ Everything the server stores is in `data/live/` (readings, accounts, notices, si
 ```
 software/dashboard/
 ├── index.html        public noise map
+├── node.html         turns a phone or laptop into a sensor node (see NODES.md)
 ├── admin.html        staff dashboard
 ├── assets/
 │   ├── core.js       settings, sites, simulator, data adapter, sign-in, grades, shared map

@@ -51,7 +51,7 @@ import soundfile as sf
 from extract_features import extract_features   # same features as training
 from extract_yamnet import yamnet_features
 from extract_chaos import chaos_from_audio       # same chaos settings as the offline analysis
-from noise_logger import compute_laeq, load_model, energy_mean, DEVICE, WARMUP_SECONDS, QUIET_DB
+from noise_logger import compute_laeq, load_model, energy_mean, DEVICE, WARMUP_SECONDS, QUIET_DB, CALIBRATION_OFFSET_DB
 
 warnings.filterwarnings("ignore")
 
@@ -157,6 +157,8 @@ def main():
                     help="trial condition written to the trials CSV and clip names, e.g. hood or nohood")
     ap.add_argument("--quiet-db", type=float, default=QUIET_DB,
                     help="clips below this dB(A) are labelled ambient without the model (0 = off)")
+    ap.add_argument("--cal-offset", type=float, default=CALIBRATION_OFFSET_DB,
+                    help="dB added to dBFS(A); default 120 from the INMP441 datasheet, change after calibrating")
     ap.add_argument("--no-chaos", action="store_true", help="do not compute the chaos metrics")
     ap.add_argument("--gps-decimals", type=int, default=6,
                     help="decimals of lat/lng sent to the dashboard (3 = about 100 m, for testing at home)")
@@ -219,7 +221,7 @@ def main():
             clip_path = CLIP_DIR / f"{tag}_{t_end:%Y%m%d_%H%M%S}.wav"
             if args.save:
                 sf.write(clip_path, samples, SR, subtype="PCM_32")
-            laeq = compute_laeq(y, SR)
+            laeq = compute_laeq(y, SR, args.cal_offset)
             quiet = laeq < args.quiet_db
             if quiet:
                 p = (class_names == "ambient").astype(float)

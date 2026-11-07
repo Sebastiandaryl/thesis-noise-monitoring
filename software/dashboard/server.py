@@ -36,6 +36,17 @@ API
     PUT    /api/sites/<id>              admin: add or update a site (name, coordinates, status, note)
     DELETE /api/sites/<id>              admin: remove a site
     GET    /api/log                     staff: activity log
+    POST   /api/clips                   phone/laptop node (node.html): one 5 s clip + its level
+    GET    /api/clips/next              classifier hub (node_hub.py): take the oldest waiting clip
+    GET    /api/hub                     whether a classifier hub is running
+
+Phone and laptop nodes
+    /node.html turns any phone or laptop browser into a sensor node. It records
+    5 s clips with the device's own microphone, computes the calibrated A-weighted
+    level, and sends each clip here. A classifier hub (software/processing/node_hub.py,
+    on the Pi or any laptop) takes the clips, runs the same features + model as the
+    Pi, and posts the finished reading. With no hub running, the level is stored
+    on its own so the node still shows on the map.
 
 If the environment variable NMA_DEVICE_KEY is set, POST /api/readings
 requires the header "X-Device-Key: <that value>".
@@ -69,10 +80,14 @@ USERS_FILE = LIVE_DIR / "users.json"
 NOTICES_FILE = LIVE_DIR / "notices.json"
 SITES_FILE = LIVE_DIR / "sites.json"
 AUDIT_FILE = LIVE_DIR / "audit.jsonl"
+CLIPS_DIR = LIVE_DIR / "clips"           # one waiting clip per phone/laptop node
+HUB_FILE = LIVE_DIR / "hub_seen"         # touched each time the classifier hub asks for work
+HUB_TIMEOUT_SEC = 20                     # hub counts as running if it asked this recently
+NODE_FIELDS = ("site_id", "name", "timestamp", "laeq_db", "lat", "lng", "gps_fix", "device", "calibrated", "cal_offset")
 
 HISTORY_HOURS = 24
 SESSION_HOURS = 12
-MAX_BODY_BYTES = 1_000_000
+MAX_BODY_BYTES = 2_000_000   # a 5 s phone clip is about 0.6 MB
 ROLES = ("admin", "planner")
 SITE_STATUSES = ("active", "maintenance", "offline")
 NOTICE_TYPES = ("info", "maintenance", "warning", "error")
@@ -231,6 +246,53 @@ def latest_per_site():
         return list(latest.values())
 
 
+def hub_online():
+    try:
+        return time.time() - HUB_FILE.stat().st_mtime < HUB_TIMEOUT_SEC
+    except FileNotFoundError:
+        return False
+
+
+def add_clip(body):
+    """A phone/laptop node sent a clip. Queue it for the hub, or keep just the level
+    when no hub is running. Only the newest clip per node waits, so a slow hub
+    never falls behind."""
+    if not isinstance(body, dict):
+        raise ValueError("send one clip as a JSON object")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,12}", str(body.get("site_id", ""))):
+        raise ValueError("node ID must be 1-12 letters, numbers, - or _")
+    reading = {k: body[k] for k in NODE_FIELDS if body.get(k) is not None}
+    validate_reading(reading)
+    if hub_online() and isinstance(body.get("audio"), str):
+        sr = int(body.get("sr") or 0)
+        if not 8000 <= sr <= 96000:
+            raise ValueError("sr must be the clip's sample rate")
+        CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+        clip = {**reading, "sr": sr, "audio": body["audio"]}
+        path = CLIPS_DIR / f"{reading['site_id']}.json"
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(clip), encoding="utf-8")
+        tmp.replace(path)
+        return {"queued": True}
+    add_reading(reading)
+    return {"queued": False, "stored": 1}
+
+
+def next_clip():
+    LIVE_DIR.mkdir(parents=True, exist_ok=True)
+    HUB_FILE.touch()
+    with lock:
+        files = sorted(CLIPS_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime) if CLIPS_DIR.exists() else []
+        for path in files:
+            try:
+                clip = json.loads(path.read_text(encoding="utf-8"))
+                path.unlink()
+                return clip
+            except (OSError, json.JSONDecodeError):
+                continue
+    return None
+
+
 def active_notices():
     now = now_utc()
     return [n for n in read_json(NOTICES_FILE, []) if not n.get("expires") or parse_time(n["expires"]) > now]
@@ -313,6 +375,13 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/readings/history":
             with lock:
                 return self.send_json(200, list(readings), cors=True)
+        if path == "/api/hub":
+            pending = len(list(CLIPS_DIR.glob("*.json"))) if CLIPS_DIR.exists() else 0
+            return self.send_json(200, {"online": hub_online(), "waiting": pending})
+        if path == "/api/clips/next":
+            if DEVICE_KEY and not hmac.compare_digest(self.headers.get("X-Device-Key", ""), DEVICE_KEY):
+                return self.send_json(403, {"error": "wrong device key"})
+            return self.send_json(200, {"clip": next_clip()})
         if path == "/api/me":
             user, _ = self.current_user()
             if not user:
@@ -356,6 +425,15 @@ class Handler(SimpleHTTPRequestHandler):
             for r in items:
                 add_reading(r)
             return self.send_json(201, {"stored": len(items)}, cors=True)
+
+        if path == "/api/clips":
+            if DEVICE_KEY and not hmac.compare_digest(self.headers.get("X-Device-Key", ""), DEVICE_KEY):
+                audit(None, "reading.rejected", f"Rejected clip from {self.client_address[0]}: wrong device key")
+                return self.send_json(403, {"error": "wrong device key"})
+            try:
+                return self.send_json(201, add_clip(body))
+            except (ValueError, TypeError) as e:
+                return self.send_json(400, {"error": str(e)})
 
         if path == "/api/login":
             ip = self.client_address[0]

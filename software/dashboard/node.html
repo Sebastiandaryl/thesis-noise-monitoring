@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sensor Node</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1b1f24; --muted: #5f6b7a; --line: #dde1e6;
+    --accent: #1f6feb; --ok: #1a7f37; --warn: #b35900; --bad: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1216; --card: #191d23; --text: #e8eaed; --muted: #9aa4b1; --line: #2b313a;
+            --accent: #4c8dff; --ok: #3fb950; --warn: #e39b3b; --bad: #ff6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.3rem; margin: 4px 0 2px; }
+  h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  p { margin: 6px 0; }
+  .sub { color: var(--muted); font-size: .9rem; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 12px 0; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 8px 0 3px; }
+  input, select { width: 100%; padding: 10px; font-size: 1rem; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; min-width: 0; }
+  button { font: inherit; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; width: 100%; margin-top: 10px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .big { font-size: 3.2rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 1rem; color: var(--muted); font-weight: 500; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .k { font-size: .8rem; color: var(--muted); }
+  .v { font-weight: 600; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: .8rem; font-weight: 600; border: 1px solid currentColor; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 10px; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  ol { padding-left: 20px; margin: 6px 0; }
+  li { margin: 4px 0; }
+  .hidden { display: none; }
+  #log { font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--muted); max-height: 140px; overflow: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sensor node</h1>
+  <p class="sub">Turns this phone or laptop into a noise sensor for the map. It uses this device's microphone, measures the level in dB(A), and sends each 5-second clip to be classified the same way as the Raspberry Pi.</p>
+
+  <!-- 1. SETUP -->
+  <section class="card" id="setupCard">
+    <h2>1 · Name this node</h2>
+    <div class="row">
+      <div><label for="nodeId">Node ID (must be different on every device)</label><input id="nodeId" placeholder="N03" maxlength="12"></div>
+      <div><label for="device">Device</label>
+        <select id="device"><option value="phone">Phone</option><option value="laptop">Laptop</option></select></div>
+    </div>
+    <label for="nodeName">Name on the map</label>
+    <input id="nodeName" placeholder="e.g. Velasco lobby · Ana's phone" maxlength="60">
+    <label for="locMode">Location on the map</label>
+    <select id="locMode">
+      <option value="gps">Use this device's location (GPS / Wi-Fi)</option>
+      <option value="manual">Type the coordinates myself</option>
+    </select>
+    <div class="row hidden" id="manualLoc">
+      <div><label for="lat">Latitude</label><input id="lat" inputmode="decimal" placeholder="14.5649"></div>
+      <div><label for="lng">Longitude</label><input id="lng" inputmode="decimal" placeholder="120.9932"></div>
+    </div>
+    <details>
+      <summary class="sub" style="margin-top:10px;cursor:pointer">More settings</summary>
+      <label for="interval">Send a reading every</label>
+      <select id="interval"><option value="5">5 seconds (like the Pi)</option><option value="10">10 seconds</option><option value="30">30 seconds</option></select>
+      <label for="devKey">Device key (only if the server asks for one)</label>
+      <input id="devKey" type="password" autocomplete="off">
+    </details>
+  </section>
+
+  <!-- 2. CALIBRATE -->
+  <section class="card">
+    <h2>2 · Calibrate the microphone <span id="calPill" class="pill warn">Not calibrated</span></h2>
+    <p class="sub">Every microphone hears loudness a little differently. Calibrating makes this device read the same dB as the reference.</p>
+    <ol class="sub">
+      <li>Put this device right next to the reference (the Raspberry Pi, or a sound meter).</li>
+      <li>Play steady test noise nearby, about as loud as a busy street. Any device can play it with the button below.</li>
+      <li>Press <b>Measure</b> and keep still for 15 seconds.</li>
+    </ol>
+    <label for="refMode">Reference</label>
+    <select id="refMode">
+      <option value="node">The Raspberry Pi on the map (automatic)</option>
+      <option value="number">A number I read from a sound meter</option>
+    </select>
+    <div id="refNodeBox"><label for="refNode">Reference node ID</label><input id="refNode" value="N02" maxlength="12"></div>
+    <div id="refNumBox" class="hidden"><label for="refDb">Sound meter reading, dB(A)</label><input id="refDb" inputmode="decimal" placeholder="75.0"></div>
+    <button id="calBtn">Measure (15 s)</button>
+    <div class="bar"><div id="calBar"></div></div>
+    <p id="calMsg" class="sub"></p>
+    <button id="noiseBtn">Play test noise on this device</button>
+    <details>
+      <summary class="sub" style="margin-top:10px;cursor:pointer">Set the offset by hand</summary>
+      <label for="offset">Calibration offset (dB added to dBFS)</label>
+      <input id="offset" inputmode="decimal">
+      <p class="sub" id="calWhen"></p>
+    </details>
+  </section>
+
+  <!-- 3. RUN -->
+  <section class="card">
+    <h2>3 · Run</h2>
+    <button id="startBtn" class="primary">Start sensor</button>
+    <div class="grid">
+      <div><div class="k">Level now</div><div><span class="big" id="dbNow">--</span> <span class="unit">dB(A)</span></div></div>
+      <div><div class="k">Last reading on the map</div><div class="v" id="lastCat">--</div><div class="sub" id="lastWhen"></div></div>
+      <div><div class="k">Sending</div><div class="v" id="sendState">Stopped</div></div>
+      <div><div class="k">Classifier</div><div class="v" id="hubState">Checking…</div></div>
+      <div><div class="k">Location</div><div class="v" id="locState">--</div></div>
+      <div><div class="k">Readings sent</div><div class="v" id="sentCount">0</div></div>
+    </div>
+    <p class="sub" style="margin-top:12px">Keep this page open with the screen on, and plug in the charger. The page asks the device to stay awake while it runs.</p>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+/* ---------- settings ---------- */
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("nma.node." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("nma.node." + k, JSON.stringify(v)); } catch {} },
+};
+const DEFAULT_OFFSET = { phone: 100, laptop: 100 };   // rough guess until calibrated
+const CLIP_SECONDS = 5, WARMUP_SECONDS = 1, CAL_SECONDS = 15;
+const q = new URLSearchParams(location.search);
+const fields = ["nodeId", "nodeName", "device", "locMode", "lat", "lng", "interval", "devKey", "refMode", "refNode", "refDb"];
+fields.forEach(f => { const v = q.get(f === "nodeId" ? "id" : f === "nodeName" ? "name" : f) ?? store.get(f, null); if (v != null) $(f).value = v; });
+fields.forEach(f => $(f).addEventListener("change", () => { store.set(f, $(f).value.trim()); syncUi(); }));
+if (!$("interval").value) $("interval").value = "5";
+
+function offset() { const v = parseFloat($("offset").value); return isFinite(v) ? v : DEFAULT_OFFSET[$("device").value]; }
+function calibrated() { return store.get("calibrated", false) && store.get("calDevice", "") === $("device").value; }
+$("offset").value = store.get("offset", DEFAULT_OFFSET[$("device").value]);
+$("offset").addEventListener("change", () => {
+  const v = parseFloat($("offset").value);
+  if (isFinite(v)) { store.set("offset", v); store.set("calibrated", true); store.set("calDevice", $("device").value); store.set("calAt", new Date().toISOString()); }
+  syncUi();
+});
+function syncUi() {
+  $("manualLoc").classList.toggle("hidden", $("locMode").value !== "manual");
+  $("refNodeBox").classList.toggle("hidden", $("refMode").value !== "node");
+  $("refNumBox").classList.toggle("hidden", $("refMode").value !== "number");
+  const c = calibrated();
+  $("calPill").textContent = c ? `Calibrated (${offset().toFixed(1)} dB)` : "Not calibrated";
+  $("calPill").className = "pill " + (c ? "ok" : "warn");
+  const at = store.get("calAt", null);
+  $("calWhen").textContent = at ? "Last calibrated " + new Date(at).toLocaleString() : "";
+}
+syncUi();
+function log(msg) { const el = $("log"); el.textContent = `${new Date().toLocaleTimeString()}  ${msg}\n` + el.textContent.slice(0, 3000); }
+function headers() { const h = { "Content-Type": "application/json" }; if ($("devKey").value) h["X-Device-Key"] = $("devKey").value; return h; }
+
+/* ---------- A-weighted level (same method as compute_laeq in Python) ---------- */
+function aWeight(f) {
+  const f2 = f * f;
+  const ra = (12194 ** 2 * f2 * f2) / ((f2 + 20.6 ** 2) * Math.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2)) * (f2 + 12194 ** 2));
+  return 20 * Math.log10(ra) + 2.0;
+}
+function fft(re, im) {                                   // in-place radix-2
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang), half = len >> 1;
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < half; k++) {
+        const a = i + k, b = a + half;
+        const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+}
+// A-weighted level in dBFS (no calibration offset) of a Float32Array.
+function dbfsA(y, sr) {
+  const n = y.length; let mean = 0; for (let i = 0; i < n; i++) mean += y[i]; mean /= n;
+  let size = 1; while (size < n) size <<= 1;
+  const re = new Float64Array(size), im = new Float64Array(size);
+  for (let i = 0; i < n; i++) re[i] = y[i] - mean;
+  fft(re, im);
+  let energy = 0;
+  for (let k = 1; k < size; k++) {
+    const f = (k <= size / 2 ? k : size - k) * sr / size;
+    const g = Math.pow(10, aWeight(f) / 10);
+    energy += (re[k] * re[k] + im[k] * im[k]) * g;
+  }
+  const ms = energy / size / n;
+  return 10 * Math.log10(Math.max(ms, 1e-24));
+}
+
+/* ---------- microphone ---------- */
+let ctx = null, stream = null, sr = 44100, ring = null, writePos = 0, filled = 0, started = 0;
+let liveTimer = null, sendTimer = null, running = false, sent = 0, wakeLock = null;
+
+async function openMic() {
+  if (ctx) return;
+  stream = await navigator.mediaDevices.getUserMedia({ audio: {
+    echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  let source;
+  try { ctx = new AudioContext({ sampleRate: 44100 }); source = ctx.createMediaStreamSource(stream); }
+  catch { if (ctx) ctx.close(); ctx = new AudioContext(); source = ctx.createMediaStreamSource(stream); }
+  sr = ctx.sampleRate;
+  ring = new Float32Array(sr * CAL_SECONDS); writePos = 0; filled = 0; started = performance.now();
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  proc.onaudioprocess = e => {
+    const x = e.inputBuffer.getChannelData(0);
+    for (let i = 0; i < x.length; i++) { ring[writePos] = x[i]; writePos = (writePos + 1) % ring.length; }
+    filled = Math.min(ring.length, filled + x.length);
+  };
+  const mute = ctx.createGain(); mute.gain.value = 0;
+  source.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+  if (ctx.state === "suspended") await ctx.resume();
+  const track = stream.getAudioTracks()[0];
+  log(`Microphone on: ${track.label || "default"} at ${sr} Hz`);
+}
+function lastSeconds(sec) {
+  const n = Math.min(Math.round(sec * sr), filled), out = new Float32Array(n);
+  let start = (writePos - n + ring.length) % ring.length;
+  for (let i = 0; i < n; i++) out[i] = ring[(start + i) % ring.length];
+  return out;
+}
+function warmedUp(sec) { return (performance.now() - started) / 1000 >= WARMUP_SECONDS + sec && filled >= sec * sr; }
+
+/* ---------- location ---------- */
+let pos = null;
+function watchLocation() {
+  if ($("locMode").value !== "gps" || !navigator.geolocation) return;
+  navigator.geolocation.watchPosition(
+    p => { pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy, ts: Date.now() }; showLoc(); },
+    e => { $("locState").textContent = "No location: " + e.message; },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 });
+}
+function where() {
+  if ($("locMode").value === "manual") {
+    const lat = parseFloat($("lat").value), lng = parseFloat($("lng").value);
+    return isFinite(lat) && isFinite(lng) ? { lat, lng } : null;
+  }
+  return pos && Date.now() - pos.ts < 120000 ? pos : null;
+}
+function showLoc() {
+  const w = where();
+  $("locState").textContent = w ? `${w.lat.toFixed(5)}, ${w.lng.toFixed(5)}` + (w.acc ? ` (±${Math.round(w.acc)} m)` : "") : ($("locMode").value === "manual" ? "Type the coordinates" : "Waiting for location…");
+}
+
+/* ---------- sending ---------- */
+function toBase64Int16(y) {
+  const pcm = new Int16Array(y.length);
+  for (let i = 0; i < y.length; i++) pcm[i] = Math.max(-32768, Math.min(32767, Math.round(y[i] * 32767)));
+  const bytes = new Uint8Array(pcm.buffer); let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+async function sendClip() {
+  if (!running || !warmedUp(CLIP_SECONDS)) return;
+  const y = lastSeconds(CLIP_SECONDS), db = dbfsA(y, sr) + offset(), w = where();
+  const body = {
+    site_id: $("nodeId").value.trim(), name: $("nodeName").value.trim() || $("nodeId").value.trim(),
+    timestamp: new Date().toISOString(), laeq_db: +db.toFixed(1), device: $("device").value,
+    calibrated: calibrated(), cal_offset: +offset().toFixed(2), sr, audio: toBase64Int16(y),
+    gps_fix: !!w, ...(w ? { lat: +w.lat.toFixed(6), lng: +w.lng.toFixed(6) } : {}),
+  };
+  $("sendState").textContent = "Sending…";
+  try {
+    const res = await fetch("api/clips", { method: "POST", headers: headers(), body: JSON.stringify(body) });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || "HTTP " + res.status);
+    sent++; $("sentCount").textContent = sent;
+    $("sendState").innerHTML = out.queued ? '<span class="ok">Sent for classifying</span>' : '<span class="warn">Sent (level only)</span>';
+    log(`${db.toFixed(1)} dB(A) sent` + (out.queued ? ", waiting for classifier" : ", classifier not running") + (w ? "" : ", no location yet"));
+  } catch (e) {
+    $("sendState").innerHTML = '<span class="bad">Not sent</span>';
+    log("Not sent: " + e.message);
+  }
+}
+
+async function poll() {
+  try {
+    const hub = await (await fetch("api/hub", { cache: "no-store" })).json();
+    $("hubState").innerHTML = hub.online ? '<span class="ok">Running</span>' : '<span class="warn">Not running (level only)</span>';
+  } catch { $("hubState").innerHTML = '<span class="bad">Dashboard not reachable</span>'; }
+  const id = $("nodeId").value.trim();
+  if (!id) return;
+  try {
+    const latest = await (await fetch("api/readings/latest", { cache: "no-store" })).json();
+    const r = latest.find(x => x.site_id === id);
+    if (r) {
+      const p = r.probabilities && r.category ? r.probabilities[r.category] : null;
+      $("lastCat").textContent = `${r.laeq_db} dB(A) · ${r.category || "no class"}` + (p != null ? ` (${Math.round(p * 100)}%)` : "");
+      $("lastWhen").textContent = new Date(r.timestamp).toLocaleTimeString();
+    }
+  } catch {}
+}
+setInterval(poll, 5000); poll();
+
+async function keepAwake() {
+  try { if ("wakeLock" in navigator && running) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { keepAwake(); if (ctx && ctx.state === "suspended") ctx.resume(); } });
+
+$("startBtn").onclick = async () => {
+  if (running) {
+    running = false; clearInterval(sendTimer); $("startBtn").textContent = "Start sensor"; $("sendState").textContent = "Stopped";
+    if (wakeLock) wakeLock.release().catch(() => {}); return;
+  }
+  const id = $("nodeId").value.trim();
+  if (!/^[A-Za-z0-9_-]{1,12}$/.test(id)) { alert("Type a node ID first, for example N03 (letters and numbers only)."); return; }
+  if ($("locMode").value === "manual" && !where()) { alert("Type the latitude and longitude, or choose 'Use this device's location'."); return; }
+  if (!calibrated() && !confirm("This device is not calibrated yet, so its dB will be off. Start anyway?")) return;
+  try { await openMic(); } catch (e) { alert("Could not open the microphone: " + e.message); return; }
+  running = true; $("startBtn").textContent = "Stop sensor"; $("sendState").textContent = "Starting…";
+  watchLocation(); showLoc(); keepAwake();
+  sendTimer = setInterval(sendClip, +$("interval").value * 1000);
+  setTimeout(sendClip, (WARMUP_SECONDS + CLIP_SECONDS) * 1000 + 200);
+};
+
+// live meter: last 1 second
+liveTimer = setInterval(() => { if (ctx && warmedUp(1)) $("dbNow").textContent = (dbfsA(lastSeconds(1), sr) + offset()).toFixed(1); }, 1000);
+
+/* ---------- calibration ---------- */
+$("calBtn").onclick = async () => {
+  try { await openMic(); } catch (e) { alert("Could not open the microphone: " + e.message); return; }
+  const mode = $("refMode").value;
+  if (mode === "number" && !isFinite(parseFloat($("refDb").value))) { alert("Type the sound meter's reading first."); return; }
+  $("calBtn").disabled = true; $("calMsg").textContent = "Measuring… keep the test noise playing.";
+  // wait for the 1 s warm-up, then measure CAL_SECONDS of fresh audio
+  const wait = Math.max(0, (WARMUP_SECONDS - (performance.now() - started) / 1000)) * 1000;
+  await new Promise(r => setTimeout(r, wait));
+  const t0 = Date.now(), t1 = t0 + CAL_SECONDS * 1000;
+  await new Promise(done => {
+    const tick = setInterval(() => { const f = Math.min(1, (Date.now() - t0) / (t1 - t0)); $("calBar").style.width = (f * 100) + "%"; if (f >= 1) { clearInterval(tick); done(); } }, 200);
+  });
+  const own = dbfsA(lastSeconds(CAL_SECONDS), sr);
+  let ref = null;
+  if (mode === "number") ref = parseFloat($("refDb").value);
+  else {
+    $("calMsg").textContent = "Getting the reference node's readings…";
+    const refId = $("refNode").value.trim();
+    for (let i = 0; i < 8 && ref == null; i++) {
+      try {
+        const hist = await (await fetch("api/readings/history", { cache: "no-store" })).json();
+        // a reading's timestamp is the end of its 5 s clip: keep clips fully inside the window
+        const vals = hist.filter(r => r.site_id === refId).filter(r => { const t = Date.parse(r.timestamp); return t >= t0 + CLIP_SECONDS * 1000 - 1500 && t <= t1 + 1500; }).map(r => +r.laeq_db);
+        if (vals.length) ref = 10 * Math.log10(vals.reduce((s, v) => s + 10 ** (v / 10), 0) / vals.length);
+      } catch {}
+      if (ref == null) await new Promise(r => setTimeout(r, 2000));
+    }
+    if (ref == null) {
+      $("calMsg").innerHTML = `<span class="bad">No readings from ${refId} during the measurement.</span> Is the Pi running and sending? Or choose "A number I read from a sound meter".`;
+      $("calBtn").disabled = false; $("calBar").style.width = "0"; return;
+    }
+  }
+  const newOffset = ref - own;
+  $("offset").value = newOffset.toFixed(1);
+  store.set("offset", +newOffset.toFixed(2)); store.set("calibrated", true); store.set("calDevice", $("device").value); store.set("calAt", new Date().toISOString());
+  $("calMsg").innerHTML = `<span class="ok">Done.</span> Reference ${ref.toFixed(1)} dB(A), this device ${own.toFixed(1)} dBFS(A), so the offset is <b>${newOffset.toFixed(1)} dB</b>. This device now reads ${ (own + newOffset).toFixed(1)} dB(A).`;
+  log(`Calibrated: offset ${newOffset.toFixed(1)} dB (reference ${ref.toFixed(1)})`);
+  $("calBtn").disabled = false; syncUi();
+};
+
+/* ---------- pink test noise ---------- */
+let noiseCtx = null, noiseSrc = null;
+$("noiseBtn").onclick = () => {
+  if (noiseSrc) { noiseSrc.stop(); noiseSrc = null; $("noiseBtn").textContent = "Play test noise on this device"; return; }
+  noiseCtx = noiseCtx || new AudioContext();
+  const len = noiseCtx.sampleRate * 10, buf = noiseCtx.createBuffer(1, len, noiseCtx.sampleRate), d = buf.getChannelData(0);
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;   // Paul Kellet's pink filter
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = .99886 * b0 + w * .0555179; b1 = .99332 * b1 + w * .0750759; b2 = .969 * b2 + w * .153852;
+    b3 = .8665 * b3 + w * .3104856; b4 = .55 * b4 + w * .5329522; b5 = -.7616 * b5 - w * .016898;
+    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * .5362) * .11; b6 = w * .115926;
+  }
+  noiseSrc = noiseCtx.createBufferSource(); noiseSrc.buffer = buf; noiseSrc.loop = true;
+  noiseSrc.connect(noiseCtx.destination); noiseSrc.start(); noiseCtx.resume();
+  $("noiseBtn").textContent = "Stop test noise";
+};
+</script>
+</body>
+</html>

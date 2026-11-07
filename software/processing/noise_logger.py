@@ -149,6 +149,8 @@ def main():
     parser.add_argument("--url", help="dashboard address; each reading is also posted there")
     parser.add_argument("--quiet-db", type=float, default=QUIET_DB,
                         help="clips below this dB(A) are labelled ambient without the model (0 = off)")
+    parser.add_argument("--cal-offset", type=float, default=CALIBRATION_OFFSET_DB,
+                        help="dB added to dBFS(A); default 120 from the INMP441 datasheet, change after calibrating")
     parser.add_argument("--site-id", default="N01", help="node id on the dashboard (must match a site there)")
     args = parser.parse_args()
 
@@ -175,7 +177,7 @@ def main():
             try:
                 record(clip)
                 y, sr = sf.read(clip)
-                laeq = compute_laeq(y, sr)
+                laeq = compute_laeq(y, sr, args.cal_offset)
 
                 if laeq < args.quiet_db:
                     p = (class_names == "ambient").astype(float)
